@@ -1,0 +1,24 @@
+title = "BnlinkVault gitleaks config"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "bnlinkvault-legacy-secret-key"
+description = "Legacy browser-shipped SECRET_KEY / LV_SITE pattern must never return"
+regex = '''(?i)(SECRET_KEY|ADMIN_HASH)\s*[:=]\s*["'][A-Za-z0-9_\-]{8,}["']'''
+tags = ["legacy", "secret"]
+
+[[rules]]
+id = "bnlinkvault-db-url-with-password"
+description = "Database URL with inline credentials"
+regex = '''postgres(?:ql)?:\/\/[^:\s\/]+:(?!CHANGE_ME|password|\$)[^@\s]{6,}@'''
+tags = ["database"]
+
+[allowlist]
+description = "Documented placeholders, CI canaries and test fixtures"
+regexes = ['''canary-[A-Za-z0-9-]+''', '''ci-throwaway-[A-Za-z0-9-]+''']
+paths = [
+  '''\.env\.example$''',
+  '''scripts/__tests__/.*''',
+  '''docs/.*''',
+]

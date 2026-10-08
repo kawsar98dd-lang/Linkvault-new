@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+.next
+coverage
+dist
+node_modules
+.turbo
+next-env.d.ts
+*.tsbuildinfo
+# SQL migrations are hand-written and checksummed by the migrator: formatting them would change the checksum.
+packages/db/migrations/*.sql
+# Generated from code by a script; regenerated, not hand-formatted.
+docs/security/permission-matrix.md

@@ -1,0 +1,34 @@
+{
+  "name": "@bnlinkvault/api",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:coverage": "vitest run --project unit --coverage"
+  },
+  "dependencies": {
+    "@bnlinkvault/auth": "workspace:*",
+    "@bnlinkvault/contracts": "workspace:*",
+    "@bnlinkvault/core": "workspace:*",
+    "@bnlinkvault/i18n": "workspace:*",
+    "@hono/zod-openapi": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bnlinkvault/config": "workspace:*",
+    "@bnlinkvault/db": "workspace:*",
+    "@bnlinkvault/testing": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,62 @@
+# One-time networked bootstrap. Phase 2 was authored WITHOUT registry access, so three things could not be done:
+#   1. resolve + verify the current stable Better Auth version (1.2.7 is below the 1.4.9 security floor)
+#   2. generate pnpm-lock.yaml (never hand-written or faked)
+#   3. run Prettier / the real TypeScript compiler
+# This workflow does them on a networked GitHub runner and pushes ONE review branch. It fails closed:
+# any unverifiable step stops the run; nothing is "skipped" or defaulted.
+name: generate-lockfile
+on: workflow_dispatch
+permissions:
+  contents: write
+concurrency:
+  group: bootstrap
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Resolve the CURRENT STABLE Better Auth version, verify it, pin it EXACTLY
+        run: node scripts/pin-better-auth.mjs
+      - name: Better Auth gate against the pinned version (policy floor + OSV; fails closed)
+        run: node scripts/check-better-auth-advisory.mjs
+      - name: Generate pnpm-lock.yaml from the pinned catalog (no hand-written lockfile)
+        run: pnpm install --lockfile-only
+      - name: Install from the generated lockfile (frozen)
+        run: pnpm install --frozen-lockfile
+      - name: Prettier (writes formatting only; generated/vendor paths are in .prettierignore)
+        run: pnpm format
+      - name: Real TypeScript compile (informational here; blocking in ci.yml)
+        continue-on-error: true
+        run: pnpm typecheck 2>&1 | tee typecheck.log
+      - name: ESLint (informational here; blocking in ci.yml)
+        continue-on-error: true
+        run: pnpm lint 2>&1 | tee lint.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bootstrap-reports
+          path: |
+            typecheck.log
+            lint.log
+          if-no-files-found: ignore
+      - name: Commit the result to a review branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b chore/bootstrap
+          git add pnpm-lock.yaml pnpm-workspace.yaml
+          git add -A -- . ':!typecheck.log' ':!lint.log'
+          git commit -m "chore: pin verified Better Auth, add lockfile, apply Prettier"
+          git push --force origin chore/bootstrap
+          {
+            echo "### Bootstrap complete"
+            echo "- Better Auth pinned: $(grep -E '^\s*better-auth:' pnpm-workspace.yaml)"
+            echo "- Branch: chore/bootstrap (review, then merge). typecheck/lint logs are in the artifact."
+            echo "- Status of the project remains: PHASE 2 IMPLEMENTED - UNVERIFIED until ci.yml is green."
+          } >> "$GITHUB_STEP_SUMMARY"

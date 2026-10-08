@@ -1,0 +1,42 @@
+{
+  "name": "bnlinkvault",
+  "private": true,
+  "version": "0.2.0",
+  "description": "BnlinkVault - Smart Link Management platform (Phase 2: secure platform foundation)",
+  "packageManager": "pnpm@10.8.0",
+  "engines": {
+    "node": ">=22.12.0 <23",
+    "pnpm": ">=10.8.0 <11"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:coverage": "turbo run test:coverage",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:routes": "node scripts/check-route-declarations.mjs",
+    "check:secrets": "node scripts/scan-secrets.mjs",
+    "check:bundle": "node scripts/scan-browser-bundle.mjs",
+    "check:better-auth": "node scripts/check-better-auth-advisory.mjs",
+    "check:scripts": "node --test \"scripts/__tests__/*.test.mjs\"",
+    "db:provision": "pnpm --filter @bnlinkvault/db run provision",
+    "sentry:test": "node scripts/sentry-test-event.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "pnpm --filter @bnlinkvault/db run migrate"
+  },
+  "devDependencies": {
+    "@bnlinkvault/config": "workspace:*",
+    "@eslint/js": "catalog:",
+    "@sentry/node": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

@@ -1,0 +1,315 @@
+# BnlinkVault CI. The GitHub-hosted runner is the AUTHORITATIVE verification environment for Phase 2.
+# Every job below is a required status check (see docs/development/ci.md for branch protection).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  TURBO_TELEMETRY_DISABLED: '1'
+
+jobs:
+  # ------------------------------------------------------------------ static checks + unit tests
+  static:
+    name: static (install, typecheck, lint, boundaries, unit tests, coverage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lockfile must be committed (fail closed, before any cache/install)
+        run: |
+          test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Architecture boundaries
+        run: pnpm check:boundaries
+      - name: Route declarations (every route declares action/resource)
+        run: pnpm check:routes
+      - name: Script self-tests (secret scanner, boundary checker, advisory parser)
+        run: pnpm check:scripts
+      - name: Repository secret scan (built-in)
+        run: pnpm check:secrets
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Format check (Prettier)
+        run: pnpm format:check
+      - name: Unit tests
+        run: pnpm test:unit
+      - name: Coverage (authorization + CSRF must be 100% branch; see packages/auth/vitest.config.ts)
+        run: |
+          pnpm --filter @bnlinkvault/auth test:coverage
+          pnpm --filter @bnlinkvault/core test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: packages/*/coverage
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------ real PostgreSQL: RLS, roles, migrations, API
+  database:
+    name: database (fresh migrations, roles, RLS, cross-tenant, auth/API security)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-superuser-pw
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Throwaway service container reachable only inside this job. The test global-setup DROPs and
+      # re-CREATEs a dedicated database, proving migrations build the schema from an EMPTY database.
+      PGPASS: ci-throwaway-superuser-pw
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lockfile must be committed (fail closed, before any cache/install)
+        run: |
+          test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: DB integration (roles, BYPASSRLS, RLS read/write/delete, audit, invitations, schema parity, migrations)
+        env:
+          TEST_ADMIN_DATABASE_URL: postgres://postgres:${{ env.PGPASS }}@localhost:5432/postgres
+        run: pnpm --filter @bnlinkvault/db test:integration
+      - name: Core integration (services, tenancy, idempotency)
+        env:
+          TEST_ADMIN_DATABASE_URL: postgres://postgres:${{ env.PGPASS }}@localhost:5432/postgres
+        run: pnpm --filter @bnlinkvault/core test:integration
+      - name: API integration (CSRF, authz, IDOR matrix, pagination, idempotency, rate limit, error contract)
+        env:
+          TEST_ADMIN_DATABASE_URL: postgres://postgres:${{ env.PGPASS }}@localhost:5432/postgres
+        run: pnpm --filter @bnlinkvault/api test:integration
+      - name: Better Auth integration (registration, verification, login, reset, sessions, revocation, TOTP) on real PostgreSQL
+        env:
+          TEST_ADMIN_DATABASE_URL: postgres://postgres:${{ env.PGPASS }}@localhost:5432/postgres
+        run: pnpm --filter @bnlinkvault/auth test:integration
+      - name: Auth unit tests needing native modules (Argon2id)
+        run: pnpm --filter @bnlinkvault/auth test:unit
+
+  # ------------------------------------------------------------------ CLI migration path + build + /healthz /readyz + bundle scan
+  web:
+    name: web (CLI provision+migrate, build, /healthz, /readyz, browser-bundle secret scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-superuser-pw
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASS: ci-throwaway-superuser-pw
+      # Canary values: unique, recognisable, >= 8 chars. The bundle scanner fails if any appears in browser JS.
+      APP_URL: https://ci.invalid
+      BETTER_AUTH_SECRET: canary-auth-secret-0123456789abcdefghijklmnopqrstuvwxyz
+      CSRF_SECRET: canary-csrf-secret-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789
+      POSTMARK_SERVER_TOKEN: canary-postmark-token-9f8e7d6c5b4a
+      GOOGLE_CLIENT_ID: canary-google-client-id
+      GOOGLE_CLIENT_SECRET: canary-google-client-secret-77aa88bb99cc
+      TURNSTILE_MODE: 'off'
+      APP_RW_PASSWORD: canary-app-rw-password-5k3m9q2w
+      APP_MIGRATOR_PASSWORD: canary-migrator-password-8n4b7v1c
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lockfile must be committed (fail closed, before any cache/install)
+        run: |
+          test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create empty database
+        run: PGPASSWORD="$PGPASS" psql -h localhost -U postgres -c 'CREATE DATABASE bnlinkvault_ci'
+      - name: Provision roles via the production CLI
+        env:
+          ADMIN_DATABASE_URL: postgres://postgres:${{ env.PGPASS }}@localhost:5432/bnlinkvault_ci
+        run: pnpm db:provision
+      - name: Migrate via the production CLI (fresh database)
+        env:
+          MIGRATOR_DATABASE_URL: postgres://app_migrator:${{ env.APP_MIGRATOR_PASSWORD }}@localhost:5432/bnlinkvault_ci
+        run: pnpm db:migrate
+      - name: Re-run migrations (must be a no-op)
+        env:
+          MIGRATOR_DATABASE_URL: postgres://app_migrator:${{ env.APP_MIGRATOR_PASSWORD }}@localhost:5432/bnlinkvault_ci
+        run: |
+          pnpm db:migrate | tee /tmp/migrate2.log
+          grep -q 'applied: \[\]' /tmp/migrate2.log
+      - name: Verify runtime role cannot bypass RLS (live database)
+        run: |
+          PGPASSWORD="$APP_RW_PASSWORD" psql -h localhost -U app_rw -d bnlinkvault_ci -tA -c \
+            "select rolsuper::text || ',' || rolbypassrls::text from pg_roles where rolname = current_user" | tee /tmp/role.txt
+          test "$(cat /tmp/role.txt)" = "false,false"
+      - name: Build (canary secrets present in the build environment)
+        env:
+          DATABASE_URL: postgres://app_rw:${{ env.APP_RW_PASSWORD }}@localhost:5432/bnlinkvault_ci
+        run: pnpm --filter @bnlinkvault/web build
+      - name: Browser bundle must contain no server-only secret (scanned AFTER the real build, with the same canary values)
+        env:
+          DATABASE_URL: postgres://app_rw:${{ env.APP_RW_PASSWORD }}@localhost:5432/bnlinkvault_ci
+          MIGRATOR_DATABASE_URL: postgres://app_migrator:${{ env.APP_MIGRATOR_PASSWORD }}@localhost:5432/bnlinkvault_ci
+        run: node scripts/scan-browser-bundle.mjs apps/web/.next/static
+      - name: Start app, check /healthz and /readyz (ready)
+        env:
+          DATABASE_URL: postgres://app_rw:${{ env.APP_RW_PASSWORD }}@localhost:5432/bnlinkvault_ci
+        run: |
+          pnpm --filter @bnlinkvault/web start -p 3100 > /tmp/web-ready.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          up=0
+          for i in $(seq 1 40); do curl -fsS http://localhost:3100/healthz > /dev/null 2>&1 && { up=1; break; }; sleep 1; done
+          test "$up" = "1" || { echo "::error::app did not start"; tail -n 30 /tmp/web-ready.log | sed -E 's#(://[^:/ ]+:)[^@/ ]+@#\1***@#g'; exit 1; }
+          curl -fsS http://localhost:3100/healthz | grep -q '"ok"'
+          curl -fsS http://localhost:3100/readyz | grep -q '"ready"'
+          curl -s -D - -o /dev/null http://localhost:3100/healthz | grep -i '^x-content-type-options: nosniff'
+          curl -s -D - -o /dev/null http://localhost:3100/ | grep -i '^content-security-policy-report-only'
+      - name: /readyz MUST fail when the database is unreachable
+        env:
+          DATABASE_URL: postgres://app_rw:${{ env.APP_RW_PASSWORD }}@localhost:5999/bnlinkvault_ci
+        run: |
+          pnpm --filter @bnlinkvault/web start -p 3101 > /tmp/web-unready.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          up=0
+          for i in $(seq 1 40); do curl -fsS http://localhost:3101/healthz > /dev/null 2>&1 && { up=1; break; }; sleep 1; done
+          test "$up" = "1" || { echo "::error::app did not start"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3101/readyz)
+          echo "readyz status with unreachable DB: $code"
+          test "$code" = "503"
+
+  # ------------------------------------------------------------------ supply chain / secrets / advisories
+  security:
+    name: security (gitleaks, dependency audit, Better Auth advisory gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: Lockfile must be committed (fail closed, before any cache/install)
+        run: |
+          test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Dependency vulnerability audit (high+ fails)
+        run: pnpm audit --audit-level=high
+      - name: Better Auth advisory gate (critical/high or unverifiable => FAIL)
+        run: pnpm check:better-auth
+      - name: Forbid floating versions
+        run: |
+          if grep -RIn --include=package.json -E ':[[:space:]]*"(latest|next|\*)"|@latest' package.json apps packages --exclude-dir=node_modules; then
+            echo "::error::floating dependency versions are forbidden"; exit 1; fi
+          if grep -n -E ':\s*[\^~]' pnpm-workspace.yaml; then echo "::error::catalog entries must be exact pins"; exit 1; fi
+
+  # ------------------------------------------------------------------ Semgrep static security analysis
+  semgrep:
+    name: semgrep (maintained security rulesets, blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Semgrep (scanner tool; floats on purpose so the rule engine stays current)
+        run: python -m pip install --disable-pip-version-check semgrep
+      - name: Scan (fails on any ERROR/WARNING finding; no local substitute)
+        env:
+          SEMGREP_SEND_METRICS: 'off'
+        run: |
+          set +e
+          semgrep scan \
+            --config p/default --config p/typescript --config p/javascript --config p/nodejs \
+            --config p/owasp-top-ten --config p/secrets \
+            --severity ERROR --severity WARNING \
+            --error --metrics=off --disable-version-check \
+            --exclude node_modules --exclude .next --exclude coverage --exclude 'scripts/__tests__' \
+            --json --output semgrep-results.json --quiet .
+          code=$?
+          set -e
+          # Report WITHOUT code snippets (a secrets finding must never be echoed into the log).
+          python - <<'PY'
+          import json, os
+          path = "semgrep-results.json"
+          if not os.path.exists(path):
+              print("::error::Semgrep produced no results file (scan did not run or rules could not be fetched)")
+              raise SystemExit(0)
+          data = json.load(open(path))
+          results = data.get("results", [])
+          errors = data.get("errors", [])
+          print(f"semgrep: {len(results)} finding(s), {len(errors)} scan error(s)")
+          for r in results:
+              print(f"  {r['extra'].get('severity','?'):8} {r['check_id']}  {r['path']}:{r['start']['line']}")
+          for e in errors:
+              print(f"  scan error: {e.get('type','?')} {e.get('path','')}")
+          PY
+          if [ ! -f semgrep-results.json ]; then echo "::error::no Semgrep results: failing closed"; exit 1; fi
+          # exit codes: 0 clean, 1 findings (--error), anything else is a scanner/rule-fetch failure => fail closed
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------ Sentry (exit criterion 12) - runs when a DSN secret exists
+  sentry:
+    name: sentry test event
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lockfile must be committed (fail closed, before any cache/install)
+        run: |
+          test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Send test event (fails if SENTRY_DSN secret is not configured)
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: pnpm sentry:test

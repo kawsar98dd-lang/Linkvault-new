@@ -1,0 +1,6 @@
+# Security-critical areas require review from the owners below (set real handles before enabling).
+/packages/auth/            @REPLACE-WITH-SECURITY-REVIEWER
+/packages/db/migrations/   @REPLACE-WITH-SECURITY-REVIEWER
+/packages/db/src/tenant.ts @REPLACE-WITH-SECURITY-REVIEWER
+/.github/workflows/        @REPLACE-WITH-SECURITY-REVIEWER
+/scripts/                  @REPLACE-WITH-SECURITY-REVIEWER

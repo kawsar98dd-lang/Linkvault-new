@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json"],
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": [".next/**", "!.next/cache/**", "dist/**"] },
+    "typecheck": { "dependsOn": ["^typecheck"], "outputs": [] },
+    "lint": { "outputs": [] },
+    "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
+    "test:unit": { "outputs": [] },
+    "test:integration": { "cache": false, "env": ["DATABASE_URL", "MIGRATOR_DATABASE_URL", "APP_DATABASE_URL", "TEST_ADMIN_DATABASE_URL"] },
+    "test:coverage": { "cache": false, "outputs": ["coverage/**"] }
+  }
+}

@@ -1,0 +1,93 @@
+# PHASE 2 VERIFICATION STATUS
+
+**STATUS: PHASE 2 IMPLEMENTED — UNVERIFIED**
+
+This is revision **v2 (pre-CI security correction pass)**. The status is unchanged and must not be upgraded until
+GitHub Actions (`.github/workflows/ci.yml`) has actually run green on a networked runner. **Do not start Phase 3.**
+
+Reason: the environment still has no network (npm registry and OSV return HTTP 403), no PostgreSQL, no Docker, no
+`pnpm`, no Gitleaks and no Semgrep. Nothing that needs them has run. No lockfile was invented.
+
+Legend — **Implemented**: code/config written. **Statically inspected**: read/parsed/pattern-checked without running
+the product. **Executed**: actually run with the stated result. **Blocked/Deferred**: not run, reason given.
+
+## 1. Changes in this correction pass
+| item | change | state |
+|---|---|---|
+| Better Auth pin | `1.2.7` **removed** (below the 1.4.9 security floor per the supplied research; not independently re-verified here). Catalog is now `0.0.0-UNRESOLVED`, so installs and the gate fail closed. No version was guessed. | implemented; verified by executed tests |
+| Version resolution | new `scripts/pin-better-auth.mjs` (networked `generate-lockfile` workflow): takes the registry `latest` only if it exists, is plain stable, not deprecated, >= 1.4.9, and OSV shows no critical/high/unknown advisory; writes the EXACT number | implemented; logic unit-tested (executed); real registry/OSV call **blocked** |
+| Gate | `check-better-auth-advisory.mjs` now also enforces the 1.4.9 floor, exact-stable pin, queries OSV for the exact pinned version; critical/high/unknown => exit 1; unverifiable => exit 2; no skip/override path | executed offline: exits 1 on the UNRESOLVED pin; OSV query **blocked** |
+| `session.cookieCache` | now **explicitly** `{ enabled: false }` (also no `secondaryStorage`), with a static guard test and a DB-level integration test; reasoning in `docs/authentication/session-cache-analysis.md` | static guard **executed (pass)**; integration test **not run** |
+| Semgrep | new blocking `semgrep` job in `ci.yml` (maintained rulesets `p/default`, `p/typescript`, `p/javascript`, `p/nodejs`, `p/owasp-top-ten`, `p/secrets`; fails on ERROR/WARNING findings and on scanner/rule-fetch failure; log shows rule id + location only) | implemented; statically reviewed; **not run** |
+| Prettier | `pnpm format:check` is a **required `static` step**; formatting is applied once by the bootstrap workflow (Prettier is not installable here, so nothing was formatted by hand) | implemented; **blocked** |
+| Typecheck | real `tsc` impossible here; the bootstrap workflow runs real `pnpm typecheck`/`pnpm lint` and uploads the logs; `ci.yml` enforces both | **blocked** |
+| Workflows | static review found and fixed 4 genuine defects: floating-version guard false positive on the `"next"` dependency key, lockfile check ordered after the cache step, background-process handling (`kill %1`) and bundle-scan env missing the DATABASE_URL canary; plus a log-redaction regex that tripped the secret scanner | executed via tests |
+| Lockfile | **none exists** (a test asserts this); produced only by the networked workflow | by design |
+
+## 2. Executed (actually run in this environment)
+| check | result |
+|---|---|
+| `node --test scripts/__tests__` (secret patterns, bundle scanner, boundary checker, Better Auth floor/pin logic, advisory parser, `cookieCache` guard, static workflow review) | **PASS 41/41** |
+| `scripts/check-boundaries.mjs` | **PASS** |
+| `scripts/check-route-declarations.mjs` | **PASS** (18 actions) |
+| `scripts/scan-secrets.mjs` | **PASS** (no findings) |
+| `scripts/check-better-auth-advisory.mjs` | exits **1** (BLOCKING: UNRESOLVED pin) — expected, fail-closed |
+| `scripts/pin-better-auth.mjs` offline | exits **1** ("fetch failed") — expected, fail-closed |
+| YAML parse of all workflows, dependabot, catalog | parse OK (syntax only; not executed on GitHub) |
+| floating-version guard on the real tree | clean |
+| `tsc 6.0.3` partial (no `@types/node`, no third-party types; project pins 5.8.3) | 0 syntax errors, 0 unresolved first-party names/properties; 253 diagnostics, all consequences of missing packages (TS2307 ×75, TS7006 ×67, TS2591 ×58, TS18046 ×31, TS7026 ×12, TS7031 ×4, TS2345 ×4, TS2882 ×2). **Not a typecheck.** |
+| ad-hoc shim (NOT Vitest, not shipped) over 10 pure test files: policy 55, csrf 10, i18n 5, migration static 4, security headers 3, testing 1, route registry 4, observability 7, security/rate-limit/captcha/ids 8, pagination/idempotency 4 | 101 passed, 0 failed — informational only, not counted as verification |
+
+## 3. Statically inspected only
+Workflow files (`ci.yml`, `generate-lockfile.yml`, `codeql.yml`, `dependency-review.yml`) reviewed for: no silently
+accepted missing lockfile, frozen installs, real PostgreSQL 16 service containers (no SQLite/mocks), fail-closed
+security jobs, Better Auth failure blocks CI, canary secrets during build, bundle scan only after the real build,
+`/readyz` checked both ready and with an unreachable DB, no `set -x`/credential echoes, least-privilege permissions.
+This proves intent and structure, **not** that the workflows run correctly on GitHub.
+The SQL migration, Better Auth integration, Hono/zod-openapi typing and Drizzle queries were reviewed by reading only.
+
+## 4. Blocked / deferred (NOT RUN)
+| check | status |
+|---|---|
+| Dependency installation, `pnpm-lock.yaml` | **BLOCKED** — network |
+| Real TypeScript typecheck, ESLint (`strictTypeChecked`), Prettier | **NOT RUN** — dependencies not installable |
+| Vitest unit tests (all packages) | **NOT RUN** |
+| PostgreSQL: fresh migration, role provisioning, RLS (read/update/delete/IDOR), `app_rw` NOBYPASSRLS, audit append-only, invitations, schema parity, replay | **NOT RUN — PostgreSQL unavailable** (the SQL has never been executed or parsed by a database) |
+| Core service + API integration (CSRF, authz, IDOR matrix, idempotency, pagination, rate limit, errors) | **NOT RUN** |
+| Better Auth flows incl. TOTP and DB-level session-revocation test | **NOT RUN** |
+| Better Auth security-advisory verification | **NOT RUN — network unavailable** |
+| `pnpm audit`, Gitleaks, **Semgrep**, CodeQL, dependency-review | **NOT RUN** |
+| `next build`, browser-bundle scan on a real bundle, `/healthz`, `/readyz` (ready and unreachable DB) | **NOT RUN** |
+| Sentry test event | **NOT RUN** (no DSN/network) |
+| Coverage (100% branch policy/CSRF) | **NOT MEASURED** |
+| GitHub Actions verification | **DEFERRED** — the next authoritative step |
+
+## 5. Phase 2 exit criteria
+| # | Criterion | Status |
+|---|---|---|
+| 1 | Cross-tenant tests green | NOT RUN (written) |
+| 2 | RLS enforces isolation | NOT RUN |
+| 3 | `app_rw` has no BYPASSRLS | NOT RUN (tests, CI step and `/readyz` check written) |
+| 4 | Every protected route declares authorization | IMPLEMENTED + static check executed (pass); runtime/tests NOT RUN |
+| 5 | Auth/session/CSRF/rate-limit security tests | NOT RUN |
+| 6 | Security-critical branch coverage | NOT MEASURED |
+| 7 | Secret scanning blocks exposed secrets | PARTIAL: built-in scanner executed; Gitleaks/Semgrep NOT RUN |
+| 8 | No server-only secrets in browser bundles | NOT RUN on a real bundle |
+| 9 | Migrations work from a fresh DB | NOT RUN |
+| 10 | CI green | DEFERRED |
+| 11 | `/readyz` verifies readiness | IMPLEMENTED; NOT RUN |
+| 12 | Sentry test event | NOT RUN |
+| 13 | Documentation reflects implementation | DONE (implemented vs verified separated) |
+| 14 | No Phase 3+ feature implemented | CONFIRMED by inspection |
+
+## 6. What to expect on the first real run
+1. `generate-lockfile` may fail closed (registry `latest` is a prerelease/deprecated, below floor, or has advisories).
+2. Other pins may not exist; `pnpm audit` may reject old ones.
+3. Better Auth 1.4+ may differ from the 1.2.x API used (options, plugin imports, endpoint names, schema fields).
+4. SQL (grants, definer ownership, policy expressions, `RETURNING` under RLS) is the highest-risk unverified area.
+5. Strict ESLint/TypeScript findings, Hono/zod-openapi typing, coverage thresholds, Semgrep findings.
+
+## 7. Next step (no local coding)
+Run **generate-lockfile** → merge `chore/bootstrap` → open a PR → read the `ci` results (static, database, web,
+security, semgrep) plus CodeQL/dependency-review → send me the failures. Protect `main` with those checks
+(`docs/development/ci.md`).

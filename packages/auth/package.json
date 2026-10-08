@@ -1,0 +1,37 @@
+{
+  "name": "@bnlinkvault/auth",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./policy": "./src/policy/index.ts",
+    "./csrf": "./src/csrf.ts",
+    "./better-auth": "./src/better-auth/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:coverage": "vitest run --project unit --coverage",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@bnlinkvault/contracts": "workspace:*",
+    "@bnlinkvault/db": "workspace:*",
+    "@node-rs/argon2": "catalog:",
+    "better-auth": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bnlinkvault/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

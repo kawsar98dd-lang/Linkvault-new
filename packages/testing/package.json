@@ -1,0 +1,21 @@
+{
+  "name": "@bnlinkvault/testing",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": { "@bnlinkvault/auth": "workspace:*" },
+  "devDependencies": {
+    "@bnlinkvault/config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

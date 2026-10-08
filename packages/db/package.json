@@ -1,0 +1,33 @@
+{
+  "name": "@bnlinkvault/db",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./migrate": "./src/migrate.ts",
+    "./provision": "./src/provision.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "migrate": "node --experimental-strip-types src/migrate-cli.ts",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "provision": "node --experimental-strip-types src/provision-cli.ts"
+  },
+  "dependencies": {
+    "@bnlinkvault/contracts": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@bnlinkvault/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
