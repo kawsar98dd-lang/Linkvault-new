@@ -34,6 +34,7 @@
     "@types/react-dom": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "webpack": "catalog:"
   }
 }

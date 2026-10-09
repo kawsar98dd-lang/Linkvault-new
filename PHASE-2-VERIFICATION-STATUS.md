@@ -91,3 +91,16 @@ The SQL migration, Better Auth integration, Hono/zod-openapi typing and Drizzle 
 Run **generate-lockfile** → merge `chore/bootstrap` → open a PR → read the `ci` results (static, database, web,
 security, semgrep) plus CodeQL/dependency-review → send me the failures. Protect `main` with those checks
 (`docs/development/ci.md`).
+
+## Addendum v3 — bootstrap failure `ERR_PNPM_PEER_DEP_ISSUES` (webpack peer)
+**STATUS REMAINS: PHASE 2 IMPLEMENTED — UNVERIFIED.** No GitHub Actions run was observed by the author.
+
+- Evidence: `.npmrc` has `auto-install-peers=false` + `strict-peer-dependencies=true`; no manifest declared `webpack`;
+  `apps/web` depends on `@sentry/nextjs` (used in `next.config.ts` and `src/instrumentation.ts`).
+- Fix (minimal, strictness preserved): `webpack: 5.98.0` added once to the catalog and once to `apps/web` devDependencies.
+- Executed: `node --test scripts/__tests__` 45/45 pass (new `peer-deps.test.mjs`), boundaries, route declarations, secret scan,
+  YAML/JSON parse. Better Auth gate still exits 1 on the UNRESOLVED pin (resolved on the runner by the bootstrap workflow).
+- NOT RUN: `pnpm install --lockfile-only`, frozen install, registry existence of `webpack@5.98.0`, typecheck, lint, Prettier,
+  Vitest, PostgreSQL tests, build, Semgrep/Gitleaks/CodeQL/audit (network and services unavailable).
+- NOT changed: `eslint`, `next`, Sentry versions (deprecation warnings need the registry's exact message first).
+- Further unmet peers may surface after this one (pnpm strict mode); each must be fixed the same way, never bypassed.

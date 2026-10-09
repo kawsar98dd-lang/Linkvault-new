@@ -32,3 +32,19 @@ The remaining pins were chosen from model knowledge without registry access. If 
 version or peer mismatch, move that catalog entry to the nearest published patch; `pnpm audit --audit-level=high`
 is a blocking CI gate. GitHub Actions are referenced by version tag (SHAs could not be resolved offline); Dependabot
 keeps them current.
+
+## Peer dependencies are strict (and stay strict)
+`.npmrc` sets `strict-peer-dependencies=true` and `auto-install-peers=false`, so every REQUIRED peer must be declared by
+the package that needs it. These flags are guarded by `scripts/__tests__/peer-deps.test.mjs`; bypass flags
+(`--no-strict-peer-dependencies`, `--legacy-peer-deps`, `--force`) must never be added.
+
+`webpack`: the first bootstrap run failed with `ERR_PNPM_PEER_DEP_ISSUES` because `@sentry/nextjs` →
+`@sentry/webpack-plugin` has a required peer `webpack@>=4.40.0` that nothing provided. `apps/web` (the only consumer;
+`next.config.ts` uses `withSentryConfig`) now declares `webpack` from the catalog (exact pin, single declaration point).
+Next.js ships its own compiled webpack for builds; this declaration satisfies the package manager's peer contract and is
+not used to compile the app. The pin was chosen without registry access; if the registry rejects it, move it to the
+nearest published 5.x patch (any 5.x satisfies `>=4.40.0`) and re-run the bootstrap workflow.
+
+Registry deprecation warnings for `eslint@9.24.0` and `next@15.3.0` are tracked separately and were NOT changed here:
+read the exact deprecation text in the bootstrap log (it states the reason, e.g. a security advisory or end of support)
+and upgrade deliberately, together with `pnpm audit` and the full CI run.
