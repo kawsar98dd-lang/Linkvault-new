@@ -17,7 +17,7 @@ async function readJsonBody(raw: Request): Promise<unknown> {
  * binds the key to method + path + canonical body so a key cannot be replayed on a different request.
  */
 export function idempotency(deps: ApiDeps, tenantScoped: boolean): MiddlewareHandler<ApiEnv> {
-  return async (c, next) => {
+  return async (c, next): Promise<Response | undefined> => {
     const key = c.req.header('idempotency-key');
     if (!key || !IDEMPOTENCY_KEY_RE.test(key)) {
       throw new AppError('validation_failed', { fieldErrors: [{ path: 'Idempotency-Key', message: 'a 8-128 character Idempotency-Key header is required' }] });
@@ -47,7 +47,7 @@ export function idempotency(deps: ApiDeps, tenantScoped: boolean): MiddlewareHan
     const status = c.res.status;
     if (status >= 500 || status === 429) {
       await deps.services.idempotency.release(scope, outcome.id);
-      return;
+      return undefined;
     }
     let body: unknown = null;
     try {
@@ -56,5 +56,6 @@ export function idempotency(deps: ApiDeps, tenantScoped: boolean): MiddlewareHan
       body = null;
     }
     await deps.services.idempotency.complete(scope, outcome.id, status, body);
+    return undefined;
   };
 }

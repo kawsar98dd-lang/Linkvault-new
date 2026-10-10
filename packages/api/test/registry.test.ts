@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findUndeclaredRoutes, normalizeRoutePath, validateRegistry } from '../src/registry.ts';
+import { findUndeclaredRoutes, findUnregisteredDeclarations, normalizeRoutePath, validateRegistry } from '../src/registry.ts';
 import type { RouteMeta } from '../src/types.ts';
 
 const ok: RouteMeta = { id: 'a', method: 'get', path: '/workspaces/{ws}', auth: 'session', action: 'workspace:read', resource: 'workspace', tenant: true };
@@ -37,5 +37,14 @@ describe('route normalisation / undeclared detection', () => {
       { method: 'OPTIONS', path: '/api/v1/x' },
     ];
     expect(findUndeclaredRoutes(routes, [ok])).toEqual(['GET /rogue']);
+  });
+});
+
+describe('findUnregisteredDeclarations', () => {
+  it('reports declarations that have no router entry (e.g. path typo or forgotten openapi())', () => {
+    const routes = [{ method: 'ALL', path: '/api/v1/*' }, { method: 'GET', path: '/api/v1/workspaces/:ws' }];
+    expect(findUnregisteredDeclarations(routes, [ok])).toEqual([]);
+    expect(findUnregisteredDeclarations(routes, [{ ...ok, id: 'b', path: '/workspaces/{id}', tenant: false }])).toEqual(['GET /workspaces/{id}']);
+    expect(findUnregisteredDeclarations([], [ok])).toEqual(['GET /workspaces/{ws}']);
   });
 });

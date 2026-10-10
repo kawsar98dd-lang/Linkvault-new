@@ -1,13 +1,19 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const ID_LENGTH = 20;
+/** Largest multiple of the alphabet size that fits in a byte: bytes >= LIMIT are rejected (no modulo bias). */
+const REJECTION_LIMIT = 256 - (256 % ALPHABET.length);
 
-/** `ws_` + 20 chars from a CSPRNG (rejection sampling avoids modulo bias). */
+/**
+ * `ws_` + 20 chars from a CSPRNG. `charAt` is total (always a string) and, because every accepted byte
+ * is < REJECTION_LIMIT, `b % ALPHABET.length` is always a valid index: the invariant is structural, not asserted.
+ */
 export function newWorkspacePublicId(): string {
   let out = '';
-  while (out.length < 20) {
+  while (out.length < ID_LENGTH) {
     for (const b of randomBytes(32)) {
-      if (b < 252 && out.length < 20) out += ALPHABET[b % 36];
+      if (b < REJECTION_LIMIT && out.length < ID_LENGTH) out += ALPHABET.charAt(b % ALPHABET.length);
     }
   }
   return `ws_${out}`;

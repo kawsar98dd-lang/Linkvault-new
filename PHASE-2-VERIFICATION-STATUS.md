@@ -104,3 +104,32 @@ security, semgrep) plus CodeQL/dependency-review → send me the failures. Prote
   Vitest, PostgreSQL tests, build, Semgrep/Gitleaks/CodeQL/audit (network and services unavailable).
 - NOT changed: `eslint`, `next`, Sentry versions (deprecation warnings need the registry's exact message first).
 - Further unmet peers may surface after this one (pnpm strict mode); each must be fixed the same way, never bypassed.
+
+## Addendum v4 — lint/typecheck failures reported by generate-lockfile #2 (commit 9a7d42d)
+**STATUS REMAINS: PHASE 2 IMPLEMENTED — UNVERIFIED.** The remote run and its logs were not accessible to the author
+(no network); the fixes below follow from the reported diagnostics and the local source only.
+
+| reported diagnostic | root cause | fix |
+|---|---|---|
+| `logger.ts:42-45` void expression in arrow shorthand (`no-confusing-void-expression`) | `debug/info/warn/error: (m, f) => emit(...)` returned a void call | braces; same fix in `db/src/client.ts` and `web/src/server/container.ts` (same rule, same pattern) |
+| `ids.ts:10` operand `string \| undefined` | `ALPHABET[b % 36]` under `noUncheckedIndexedAccess` | `ALPHABET.charAt(b % ALPHABET.length)`; rejection limit derived from the alphabet length (still 252) |
+| `fingerprint.ts:5` unnecessary `??` | `JSON.stringify` is typed `string`, but for `unknown` input it can return `undefined` (function/symbol) or throw (bigint) | explicit handling: `undefined`→`null` (unchanged), function/symbol/bigint/non-finite → `TypeError`; no collisions with `null` |
+| `OpenAPIHono<ApiEnv,{}, "/">` not assignable to `Hono<BlankEnv,...>` | `test/helpers.ts: call(app: Hono, …)` typed the app as a plain `Hono` | parameter typed `ApiApp['app']` |
+| "Not all code paths return a value" | `middleware/idempotency.ts` returned a Response on the replay path and nothing elsewhere | explicit `Promise<Response \| undefined>` and `return undefined` on every other path |
+| `RouteHandler<R, ApiEnv>` not assignable to inferred handler | generic `declareRoute<R>` computed the handler type from a deferred conditional on `R` | non-generic `routeGuard(kit, meta)`; routes are `kit.app.openapi(createRoute({ middleware: routeGuard(...) }), handler)` so handler context is inferred from the concrete route |
+
+Safety nets kept/added: startup now throws on undeclared AND unregistered declarations; the static checker
+(`scripts/lib/route-declarations.mjs`, 8 tests) verifies meta completeness and meta-vs-route method/path equality;
+the bootstrap workflow now uses `git checkout -B` so it can be re-run from `chore/bootstrap`.
+Executed: script tests 53/53, boundaries, route declarations (18/18), secret scan, YAML/JSON parse, ad-hoc execution of the
+changed core functions. NOT RUN: ESLint, the real `tsc`, Vitest, Prettier, everything needing PostgreSQL/registry/GitHub.
+The `routeGuard` refactor could not be compiled against the real `@hono/zod-openapi` types here: treat it as the most
+likely place for a residual type error.
+
+## Addendum v5 — full-project packaging
+`LinkVault-Phase-2-FULL-PROJECT-v5` is the complete working tree (all v3 content + every v4 repair), not a patch.
+**STATUS REMAINS: PHASE 2 IMPLEMENTED — UNVERIFIED.** No lockfile is included (none could be genuinely generated: the registry
+is unreachable); Better Auth is still `0.0.0-UNRESOLVED` and is resolved/verified by the `generate-lockfile` workflow.
+Also fixed in v5: Prettier now ignores `.github/workflows/` (a `GITHUB_TOKEN` push that modifies workflow files is rejected
+by GitHub, which could have broken the bootstrap push). Added `docs/development/android-upload.md` and
+`docs/development/import-zip.workflow.yml` (manual, default-branch-protecting ZIP extraction helper).

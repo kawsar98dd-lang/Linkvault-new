@@ -1,8 +1,20 @@
 import { createHash } from 'node:crypto';
 
-/** Deterministic JSON (sorted keys) so semantically equal bodies hash equally. */
+/**
+ * Deterministic JSON (sorted keys) so semantically equal bodies hash equally.
+ * Input is `unknown`, so unsupported runtime values are handled explicitly instead of relying on
+ * `JSON.stringify` quirks (it returns `undefined` for functions/symbols and throws on bigint):
+ * `undefined` canonicalises to `null` (as before); function/symbol/bigint/non-finite numbers are rejected,
+ * so they can never collide with a legitimate `null`. Parsed JSON request bodies never contain them.
+ */
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError('canonicalJson: non-finite number');
+    return JSON.stringify(value);
+  }
+  if (typeof value !== 'object') throw new TypeError(`canonicalJson: unsupported ${typeof value}`);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   const obj = value as Record<string, unknown>;
   return `{${Object.keys(obj)

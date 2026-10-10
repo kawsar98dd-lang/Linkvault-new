@@ -10,8 +10,8 @@ modules, and CI scans built browser bundles for server secret *values* and *name
 
 ## Layers
 1. **Authentication**: sessions are server-side; no auth state in browser storage (lint + boundary rule).
-2. **Authorization**: one `can()`; every route declares action/resource via `declareRoute()`; startup throws
-   if a router entry is undeclared; `scripts/check-route-declarations.mjs` guards the source statically.
+2. **Authorization**: one `can()`; every route declares action/resource via `routeGuard(kit, meta)`; startup throws
+   if a router entry is undeclared OR a declaration has no router entry; `scripts/check-route-declarations.mjs` guards the source statically.
 3. **Tenancy**: path-resolved membership (404 for non-members) + RLS in PostgreSQL (defence in depth).
 4. **Input**: Zod on every body/query/param; unknown keys rejected on write bodies.
 5. **Errors**: RFC 9457 problems; unknown errors never leak messages/stacks/SQL; cross-tenant == not found.

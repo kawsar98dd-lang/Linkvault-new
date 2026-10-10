@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { accessLog, notFoundHandler, onError, requestId } from './middleware/core.ts';
-import { findUndeclaredRoutes, validateRegistry } from './registry.ts';
+import { findUndeclaredRoutes, findUnregisteredDeclarations, validateRegistry } from './registry.ts';
 import { registerIdentityRoutes } from './routes/identity.ts';
 import { registerWorkspaceRoutes } from './routes/workspaces.ts';
 import type { ApiDeps, ApiEnv, RouteMeta } from './types.ts';
@@ -35,8 +35,15 @@ export function createApiApp(deps: ApiDeps): ApiApp {
 
   const problems = validateRegistry(registry);
   const undeclared = findUndeclaredRoutes(app.routes, registry, API_BASE_PATH);
-  if (problems.length > 0 || undeclared.length > 0) {
-    throw new Error(`Invalid route declarations: ${[...problems, ...undeclared.map((u) => `${u}: not declared`)].join('; ')}`);
+  const unregistered = findUnregisteredDeclarations(app.routes, registry, API_BASE_PATH);
+  if (problems.length > 0 || undeclared.length > 0 || unregistered.length > 0) {
+    throw new Error(
+      `Invalid route declarations: ${[
+        ...problems,
+        ...undeclared.map((u) => `${u}: registered in the router but not declared`),
+        ...unregistered.map((u) => `${u}: declared but not registered (method/path mismatch?)`),
+      ].join('; ')}`,
+    );
   }
   return { app, registry };
 }

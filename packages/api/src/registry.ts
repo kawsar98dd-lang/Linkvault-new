@@ -56,3 +56,17 @@ export function findUndeclaredRoutes(
   }
   return missing;
 }
+
+/** Declarations (RouteMeta) with no matching router entry: a mismatched path/method or a forgotten registration. */
+export function findUnregisteredDeclarations(
+  honoRoutes: readonly { method: string; path: string }[],
+  registry: readonly RouteMeta[],
+  base = '/api/v1',
+): string[] {
+  const present = new Set(
+    honoRoutes
+      .filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS')
+      .map((r) => `${r.method.toUpperCase()} ${normalizeRoutePath(r.path, base)}`),
+  );
+  return registry.map((r) => `${r.method.toUpperCase()} ${r.path}`).filter((key) => !present.has(key));
+}

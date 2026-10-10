@@ -49,7 +49,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b chore/bootstrap
+          # -B: the workflow may be re-run from chore/bootstrap itself (branch already exists)
+          git checkout -B chore/bootstrap
           git add pnpm-lock.yaml pnpm-workspace.yaml
           git add -A -- . ':!typecheck.log' ':!lint.log'
           git commit -m "chore: pin verified Better Auth, add lockfile, apply Prettier"

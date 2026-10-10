@@ -20,7 +20,9 @@ export function createPool(options: PoolOptions): pg.Pool {
     connectionTimeoutMillis: 5_000,
     application_name: 'bnlinkvault-web',
   });
-  pool.on('error', (e) => options.onError?.(e));
+  pool.on('error', (e) => {
+    options.onError?.(e);
+  });
   return pool;
 }
 

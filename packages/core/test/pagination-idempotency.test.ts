@@ -30,6 +30,16 @@ describe('idempotency fingerprint', () => {
     expect(requestFingerprint('POST', '/x', { a: 1 })).not.toBe(requestFingerprint('POST', '/y', { a: 1 }));
     expect(canonicalJson({ a: undefined, b: null })).toBe('{"b":null}');
     expect(canonicalJson(undefined)).toBe('null');
+    expect(canonicalJson([undefined, 1])).toBe('[null,1]');
+    expect(canonicalJson('a"b')).toBe('"a\\"b"');
+    expect(canonicalJson(true)).toBe('true');
+  });
+  it('rejects values JSON cannot represent instead of colliding with null', () => {
+    expect(() => canonicalJson(() => 1)).toThrow(TypeError);
+    expect(() => canonicalJson(Symbol('x'))).toThrow(TypeError);
+    expect(() => canonicalJson(10n)).toThrow(TypeError);
+    expect(() => canonicalJson(Number.NaN)).toThrow(TypeError);
+    expect(() => canonicalJson({ a: Number.POSITIVE_INFINITY })).toThrow(TypeError);
   });
   it('validates key format', () => {
     expect(IDEMPOTENCY_KEY_RE.test('0b9f5a52-9c1e-4a7e-8d2c-1f3a4b5c6d7e')).toBe(true);

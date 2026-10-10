@@ -21,6 +21,9 @@ CSP report-only, CSRF, secret scanning, browser-bundle secret scanning, CI.
 ## What does NOT exist (by design)
 Links, redirects, gateways, analytics, custom domains, billing, dashboards UI, legacy-link migration.
 
+## Uploading from a phone
+See `docs/development/android-upload.md` (one ZIP + an extraction workflow; no git client needed).
+
 ## Layout
 ```
 apps/web            Next.js shell + route handlers (composition root: src/server/container.ts)
@@ -29,7 +32,7 @@ packages/contracts  zod schemas + pure domain vocabulary (roles, actions, error 
 packages/db         Drizzle schema, SQL migrations (RLS, roles), withTenant, migrator, readiness
 packages/auth       AuthPort, can()/permission matrix, CSRF, Better Auth adapter (confined)
 packages/core       domain services, audit, outbox, idempotency, logging, rate-limit/captcha ports
-packages/api        Hono app, declareRoute() + registry, middleware, auth guard
+packages/api        Hono app, routeGuard() + route registry, middleware, auth guard
 packages/i18n       en + bn (skeleton) catalogs
 packages/testing    test doubles (TestAuthPort)
 scripts/            dependency-free security/architecture checkers (+ self tests)

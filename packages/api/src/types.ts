@@ -36,7 +36,7 @@ export interface ApiEnv {
 
 type Method = 'get' | 'post' | 'patch' | 'delete';
 
-/** Every route MUST declare this. `declareRoute` refuses to register a route without it. */
+/** Every route MUST declare this via `routeGuard(kit, meta)`; startup and CI fail on undeclared/unregistered routes. */
 export type RouteMeta = { id: string; method: Method; path: string } & (
   | { auth: 'public'; reason: string }
   | {

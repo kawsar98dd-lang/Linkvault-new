@@ -39,10 +39,18 @@ export function createLogger(options: LoggerOptions): Logger {
       sink(JSON.stringify({ ts: now().toISOString(), level, msg, ...record }));
     };
     return {
-      debug: (m, f) => emit('debug', m, f),
-      info: (m, f) => emit('info', m, f),
-      warn: (m, f) => emit('warn', m, f),
-      error: (m, f) => emit('error', m, f),
+      debug: (m, f) => {
+        emit('debug', m, f);
+      },
+      info: (m, f) => {
+        emit('info', m, f);
+      },
+      warn: (m, f) => {
+        emit('warn', m, f);
+      },
+      error: (m, f) => {
+        emit('error', m, f);
+      },
       child: (f) => createLogger({ ...options, base: { ...merged, ...f } }),
     };
   };

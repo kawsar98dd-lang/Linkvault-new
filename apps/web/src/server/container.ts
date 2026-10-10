@@ -37,7 +37,12 @@ export function container(): Container {
   if (instance) return instance;
   const env = serverEnv();
   const logger = createLogger({ level: env.LOG_LEVEL, base: { service: 'web' } });
-  const pool = createPool({ connectionString: env.DATABASE_URL, onError: (e) => logger.error('pg pool error', { error: e }) });
+  const pool = createPool({
+    connectionString: env.DATABASE_URL,
+    onError: (e) => {
+      logger.error('pg pool error', { error: e });
+    },
+  });
   const db = createDatabase(pool);
 
   const mailer: Mailer = env.POSTMARK_SERVER_TOKEN

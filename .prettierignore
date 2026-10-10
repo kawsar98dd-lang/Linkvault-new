@@ -10,3 +10,6 @@ next-env.d.ts
 packages/db/migrations/*.sql
 # Generated from code by a script; regenerated, not hand-formatted.
 docs/security/permission-matrix.md
+# Workflow files are never reformatted by the bootstrap workflow: GitHub rejects pushes from GITHUB_TOKEN
+# that create/update anything under .github/workflows (it lacks the "workflows" permission).
+.github/workflows/

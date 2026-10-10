@@ -1,9 +1,11 @@
-import { createRoute, type OpenAPIHono, type RouteConfig, type RouteHandler } from '@hono/zod-openapi';
+import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { MiddlewareHandler } from 'hono';
 import { authenticate, authorize, resolveTenant } from './middleware/authz.ts';
 import { idempotency } from './middleware/idempotency.ts';
 import { csrf, rateLimit } from './middleware/security.ts';
 import type { ApiDeps, ApiEnv, RouteMeta } from './types.ts';
+
+export { createRoute } from '@hono/zod-openapi';
 
 export interface RouteKit {
   app: OpenAPIHono<ApiEnv>;
@@ -11,18 +13,23 @@ export interface RouteKit {
   registry: RouteMeta[];
 }
 
-export { createRoute };
-
 /**
- * THE only way to add an API route. It couples the OpenAPI route with a mandatory RouteMeta
- * (auth mode, resource, action, tenant requirement) and builds the middleware chain from it:
+ * Declares a route's authorization contract and returns the middleware chain for it:
  *   rate-limit(ip) -> authenticate -> rate-limit(user) -> CSRF -> tenant -> authorize -> idempotency
- * then zod validation and the handler. Handlers never implement authorization themselves.
+ * (validation and the handler follow). Every route is registered as
+ *
+ *   kit.app.openapi(createRoute({ ..., middleware: routeGuard(kit, { id, method, path, auth, action, resource, tenant }) }), handler)
+ *
+ * This function is intentionally NOT generic over the OpenAPI route type: the route object and the
+ * handler are both typed at the call site, so `openapi()` infers the handler context from the concrete
+ * route. (A generic wrapper `declare<R>(route: R, handler: RouteHandler<R>)` cannot prove that its handler
+ * type equals the one `openapi()` derives from a deferred conditional on `R`, which is what failed typecheck.)
+ *
+ * Safety net: the meta (method + path) is cross-checked against the real router at startup
+ * (see `createApiApp`: undeclared AND unregistered routes both throw), and statically by
+ * `scripts/check-route-declarations.mjs`. Handlers never implement authorization themselves.
  */
-export function declareRoute<R extends RouteConfig>(kit: RouteKit, meta: RouteMeta, route: R, handler: RouteHandler<R, ApiEnv>): void {
-  if (meta.method !== route.method || meta.path !== route.path) {
-    throw new Error(`RouteMeta ${meta.id} does not match its OpenAPI route (${meta.method} ${meta.path} vs ${route.method} ${route.path})`);
-  }
+export function routeGuard(kit: RouteKit, meta: RouteMeta): MiddlewareHandler<ApiEnv>[] {
   const chain: MiddlewareHandler<ApiEnv>[] = [rateLimit(kit.deps, 'ip')];
   if (meta.auth === 'session') {
     chain.push(authenticate(kit.deps), rateLimit(kit.deps, 'user'), csrf(kit.deps));
@@ -31,5 +38,5 @@ export function declareRoute<R extends RouteConfig>(kit: RouteKit, meta: RouteMe
     if (meta.idempotent === true) chain.push(idempotency(kit.deps, meta.tenant));
   }
   kit.registry.push(meta);
-  kit.app.openapi({ ...route, middleware: chain } as R, handler);
+  return chain;
 }

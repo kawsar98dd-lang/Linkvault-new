@@ -115,3 +115,25 @@ test('the floating-version guard matches VALUES, not the "next" dependency key (
   assert.match('    "x": "*"', re);
   assert.match('npx foo@latest', re);
 });
+
+test('bootstrap workflow can be re-run from its own branch (git checkout -B, not -b)', () => {
+  const t = read('generate-lockfile.yml');
+  assert.match(t, /git checkout -B chore\/bootstrap/);
+  assert.doesNotMatch(t, /git checkout -b chore\/bootstrap/);
+});
+
+test('Prettier ignores workflow files so the bootstrap push cannot be rejected for modifying .github/workflows', () => {
+  const ig = readFileSync(join(REPO, '.prettierignore'), 'utf8');
+  assert.match(ig, /^\.github\/workflows\/$/m);
+});
+
+test('import-zip helper (docs/development/import-zip.workflow.yml) is safe by construction', () => {
+  const t = readFileSync(join(REPO, 'docs/development/import-zip.workflow.yml'), 'utf8');
+  assert.match(t, /refusing to write to the default branch/);
+  assert.match(t, /unsafe or secret-bearing entries/);
+  assert.match(t, /must contain exactly one top-level project directory/);
+  assert.match(t, /package\.json missing: not a full project ZIP/);
+  assert.match(t, /on:\s*\n\s+workflow_dispatch:/); // manual only
+  assert.doesNotMatch(t, /--delete|rm -rf \.|git push[^\n]*\b(main|master)\b|set -x/);
+  assert.match(t, /secrets\.IMPORT_PAT \|\| github\.token/);
+});

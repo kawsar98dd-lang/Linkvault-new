@@ -1,0 +1,68 @@
+# One-time helper for people who cannot run git (e.g. Android). Copy this file to
+# .github/workflows/import-zip.yml in the repository (GitHub web editor: Add file > Create new file).
+# It extracts an uploaded project ZIP (including hidden files such as .github/.gitignore/.npmrc) into a NEW
+# branch. It never writes to the default branch, never deletes files that are not in the ZIP, rejects unsafe
+# ZIP entries, and leaves .github/workflows untouched unless a repository secret IMPORT_PAT (a personal access
+# token with "repo" + "workflow" scope) is configured: GitHub's built-in token may not modify workflow files.
+name: import-zip
+on:
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: 'Path of the uploaded ZIP inside this branch'
+        required: true
+        default: 'LinkVault-Phase-2-FULL-PROJECT-v5.zip'
+      target_branch:
+        description: 'New branch to create/overwrite with the extracted project'
+        required: true
+        default: 'chore/import-v5'
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.IMPORT_PAT || github.token }}
+      - name: Validate, extract and commit to a new branch
+        env:
+          ZIP_PATH: ${{ inputs.zip_path }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HAS_PAT: ${{ secrets.IMPORT_PAT != '' }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          [[ "$ZIP_PATH" =~ ^[A-Za-z0-9._/-]+\.zip$ ]] || fail "invalid zip path"
+          [[ "$TARGET_BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "invalid branch name"
+          case "$TARGET_BRANCH" in main|master|"$DEFAULT_BRANCH") fail "refusing to write to the default branch";; esac
+          test -f "$ZIP_PATH" || fail "ZIP not found at $ZIP_PATH (upload it to this branch first)"
+
+          unzip -Z1 "$ZIP_PATH" > /tmp/entries.txt
+          if grep -E '(^/|(^|/)\.\.(/|$)|(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.env$|\.pem$|(^|/)id_rsa)' /tmp/entries.txt; then fail "unsafe or secret-bearing entries in ZIP"; fi
+          if grep -E '(^|/)\.env\.' /tmp/entries.txt | grep -v '\.env\.example$'; then fail ".env files are not allowed"; fi
+          [ "$(cut -d/ -f1 /tmp/entries.txt | sort -u | wc -l)" = "1" ] || fail "ZIP must contain exactly one top-level project directory"
+          ROOT="$(cut -d/ -f1 /tmp/entries.txt | sort -u)"
+          grep -qx "$ROOT/package.json" /tmp/entries.txt || fail "package.json missing: not a full project ZIP"
+          grep -qx "$ROOT/pnpm-workspace.yaml" /tmp/entries.txt || fail "pnpm-workspace.yaml missing: not a full project ZIP"
+
+          TMP="$(mktemp -d)"
+          unzip -q "$ZIP_PATH" -d "$TMP"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$TARGET_BRANCH"
+          rm -f "$ZIP_PATH"
+          cp -a "$TMP/$ROOT/." .
+          if [ "$HAS_PAT" != "true" ]; then
+            echo "Workflow files differing from this branch (NOT imported without IMPORT_PAT):"
+            git status --porcelain -- .github/workflows || true
+            git checkout HEAD -- .github/workflows 2>/dev/null || true
+            git clean -fdq -- .github/workflows
+          fi
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing to import"; exit 0; fi
+          git commit -q -m "chore: import $(basename "$ZIP_PATH")"
+          git push --force origin "$TARGET_BRANCH"
+          echo "Imported into branch $TARGET_BRANCH: $(git diff --name-only HEAD~1 HEAD | wc -l) files changed"
