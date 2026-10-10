@@ -30,7 +30,7 @@ jobs:
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -86,7 +86,7 @@ jobs:
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -141,7 +141,7 @@ jobs:
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -224,7 +224,7 @@ jobs:
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -303,7 +303,7 @@ jobs:
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
