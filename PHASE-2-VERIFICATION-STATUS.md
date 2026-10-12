@@ -133,3 +133,9 @@ is unreachable); Better Auth is still `0.0.0-UNRESOLVED` and is resolved/verifie
 Also fixed in v5: Prettier now ignores `.github/workflows/` (a `GITHUB_TOKEN` push that modifies workflow files is rejected
 by GitHub, which could have broken the bootstrap push). Added `docs/development/android-upload.md` and
 `docs/development/import-zip.workflow.yml` (manual, default-branch-protecting ZIP extraction helper).
+
+## Addendum v6 — import workflow
+Added `.github/workflows/import-zip.yml` (manual, validates the ZIP, writes only to `chore/bootstrap`, no force-push)
+and `scripts/__tests__/import-zip.test.mjs`. `docs/development/import-zip.workflow.yml` is now an identical copy of it.
+**STATUS REMAINS: PHASE 2 IMPLEMENTED — UNVERIFIED.** The import workflow itself has only been exercised against a local
+simulation, never on GitHub.

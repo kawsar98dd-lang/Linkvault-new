@@ -13,3 +13,5 @@ docs/security/permission-matrix.md
 # Workflow files are never reformatted by the bootstrap workflow: GitHub rejects pushes from GITHUB_TOKEN
 # that create/update anything under .github/workflows (it lacks the "workflows" permission).
 .github/workflows/
+# Documentation copy of .github/workflows/import-zip.yml; a unit test keeps the two byte-identical.
+docs/development/import-zip.workflow.yml

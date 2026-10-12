@@ -1,68 +1,403 @@
-# One-time helper for people who cannot run git (e.g. Android). Copy this file to
-# .github/workflows/import-zip.yml in the repository (GitHub web editor: Add file > Create new file).
-# It extracts an uploaded project ZIP (including hidden files such as .github/.gitignore/.npmrc) into a NEW
-# branch. It never writes to the default branch, never deletes files that are not in the ZIP, rejects unsafe
-# ZIP entries, and leaves .github/workflows untouched unless a repository secret IMPORT_PAT (a personal access
-# token with "repo" + "workflow" scope) is configured: GitHub's built-in token may not modify workflow files.
+# import-zip: copies a COMPLETE project ZIP into the review branch "chore/bootstrap" (never into main).
+#
+# How the ZIP reaches this workflow: you upload it to a NEW branch of this repository (for example "upload-v5")
+# with GitHub's "Add file > Upload files", then start this workflow FROM THAT BRANCH. GitHub Actions cannot see
+# files on your phone, and this workflow never downloads anything from the internet.
+#
+# Safety summary:
+#   - manual only (workflow_dispatch); refuses to run from the default branch or from chore/bootstrap itself
+#   - the ZIP is fully validated BEFORE anything is extracted (see the "Validate" step)
+#   - nothing inside the ZIP is ever executed
+#   - writes only to chore/bootstrap, with a normal push (no force); never touches main or other branches
+#   - never deletes anything from the repository
+#   - .github/workflows/** from the ZIP is NOT copied (GitHub's built-in token may not change workflow files, and
+#     this keeps your current CI untouched); changed/new workflow files are saved in pending-workflows/ instead
 name: import-zip
+
 on:
   workflow_dispatch:
     inputs:
       zip_path:
-        description: 'Path of the uploaded ZIP inside this branch'
+        description: 'Path of the ZIP inside the branch you start this run from'
         required: true
         default: 'LinkVault-Phase-2-FULL-PROJECT-v5.zip'
-      target_branch:
-        description: 'New branch to create/overwrite with the extracted project'
+      dry_run:
+        description: 'Only check the ZIP, do not write anything (keep ticked for the first run)'
+        type: boolean
         required: true
-        default: 'chore/import-v5'
+        default: true
+      expected_sha256:
+        description: 'Optional: SHA-256 printed by the dry run. If filled in, the import stops unless the ZIP matches it'
+        type: string
+        required: false
+        default: ''
+
 permissions:
   contents: write
+
+concurrency:
+  group: import-zip
+  cancel-in-progress: false
+
+env:
+  TARGET_BRANCH: chore/bootstrap
+
 jobs:
   import:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the branch this run was started from (it holds the ZIP)
+        uses: actions/checkout@v4
         with:
-          token: ${{ secrets.IMPORT_PAT || github.token }}
-      - name: Validate, extract and commit to a new branch
+          fetch-depth: 0
+
+      - name: Refuse to run from the wrong branch
         env:
-          ZIP_PATH: ${{ inputs.zip_path }}
-          TARGET_BRANCH: ${{ inputs.target_branch }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          HAS_PAT: ${{ secrets.IMPORT_PAT != '' }}
         run: |
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
-          [[ "$ZIP_PATH" =~ ^[A-Za-z0-9._/-]+\.zip$ ]] || fail "invalid zip path"
-          [[ "$TARGET_BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "invalid branch name"
-          case "$TARGET_BRANCH" in main|master|"$DEFAULT_BRANCH") fail "refusing to write to the default branch";; esac
-          test -f "$ZIP_PATH" || fail "ZIP not found at $ZIP_PATH (upload it to this branch first)"
+          [ "$REF_TYPE" = "branch" ] || fail "Start this workflow from a branch (not a tag)."
+          [ "$REF_NAME" != "$DEFAULT_BRANCH" ] || fail "Do not run this from the default branch. Upload the ZIP to a NEW branch (e.g. upload-v5) and choose that branch under 'Use workflow from'."
+          [ "$REF_NAME" != "$TARGET_BRANCH" ] || fail "Do not run this from $TARGET_BRANCH. Choose the branch that holds the uploaded ZIP."
+          echo "Started from branch: $REF_NAME"
 
-          unzip -Z1 "$ZIP_PATH" > /tmp/entries.txt
-          if grep -E '(^/|(^|/)\.\.(/|$)|(^|/)\.git(/|$)|(^|/)node_modules(/|$)|(^|/)\.env$|\.pem$|(^|/)id_rsa)' /tmp/entries.txt; then fail "unsafe or secret-bearing entries in ZIP"; fi
-          if grep -E '(^|/)\.env\.' /tmp/entries.txt | grep -v '\.env\.example$'; then fail ".env files are not allowed"; fi
-          [ "$(cut -d/ -f1 /tmp/entries.txt | sort -u | wc -l)" = "1" ] || fail "ZIP must contain exactly one top-level project directory"
-          ROOT="$(cut -d/ -f1 /tmp/entries.txt | sort -u)"
-          grep -qx "$ROOT/package.json" /tmp/entries.txt || fail "package.json missing: not a full project ZIP"
-          grep -qx "$ROOT/pnpm-workspace.yaml" /tmp/entries.txt || fail "pnpm-workspace.yaml missing: not a full project ZIP"
+      - name: Validate the ZIP and extract it into a private staging folder
+        env:
+          ZIP_PATH: ${{ inputs.zip_path }}
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, shutil, stat, sys, zipfile
 
-          TMP="$(mktemp -d)"
-          unzip -q "$ZIP_PATH" -d "$TMP"
+          MAX_ZIP = 25 * 1024 * 1024
+          MAX_ENTRIES = 2000
+          MAX_FILE = 10 * 1024 * 1024
+          MAX_TOTAL = 100 * 1024 * 1024
+          MAX_RATIO = 100
+          ALLOWED_TOP_DIRS = {'.github', 'apps', 'packages', 'scripts', 'docs'}
+          BAD_NAMES = {'.git', 'node_modules', '.next', '.turbo', '.cache', '.pnpm-store', '.vercel', 'coverage',
+                       'dist', '__macosx', '.eslintcache', '.netrc', '.pgpass', '.htpasswd', '.git-credentials'}
+          BAD_SUFFIXES = ('.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.tsbuildinfo')
+          BAD_PREFIXES = ('id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519')
+          JUNK = {'.ds_store', 'thumbs.db'}
+          REQUIRED = ['package.json', 'pnpm-workspace.yaml', '.nvmrc', 'apps/web/package.json',
+                      'packages/db/migrations/0001_init.sql', 'scripts/check-better-auth-advisory.mjs',
+                      '.github/workflows/ci.yml', '.github/workflows/generate-lockfile.yml']
+          CONTENT_PATTERNS = [
+              ('private key block', re.compile(r'-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----')),
+              ('GitHub token', re.compile(r'\bgh[pousr]_[A-Za-z0-9]{36,}\b')),
+              ('GitHub fine-grained token', re.compile(r'\bgithub_pat_[A-Za-z0-9_]{50,}\b')),
+              ('AWS access key id', re.compile(r'\bAKIA[0-9A-Z]{16}\b')),
+              ('Slack token', re.compile(r'\bxox[baprs]-[A-Za-z0-9-]{10,}')),
+              ('Anthropic key', re.compile(r'\bsk-ant-[A-Za-z0-9_-]{20,}')),
+          ]
+          NPMRC_AUTH = re.compile(r'(?im)^\s*(?://\S*:)?_(?:authToken|auth|password)\s*=\s*(?!\$\{)\S+')
+
+          def die(msg):
+              print('::error::' + str(msg).replace('\r', ' ').replace('\n', ' '))
+              sys.exit(1)
+
+          ws = os.path.realpath(os.environ['GITHUB_WORKSPACE'])
+          tmp = os.environ['RUNNER_TEMP']
+          zip_in = os.environ['ZIP_PATH']
+          if (not re.fullmatch(r'[A-Za-z0-9._][A-Za-z0-9._/-]*\.zip', zip_in)
+                  or '//' in zip_in or any(seg in ('..', '.git') for seg in zip_in.split('/'))):
+              die('Invalid zip_path. Use a plain path such as LinkVault-Phase-2-FULL-PROJECT-v5.zip')
+          zp = os.path.join(ws, zip_in)
+          if os.path.islink(zp) or not os.path.isfile(zp):
+              die('ZIP not found at ' + ascii(zip_in) + ' in this branch. Upload it to the branch you started the run from.')
+          if not os.path.realpath(zp).startswith(ws + os.sep):
+              die('ZIP path points outside the repository')
+          size = os.path.getsize(zp)
+          if size == 0 or size > MAX_ZIP:
+              die('ZIP size is not acceptable (limit 25 MB): %d bytes' % size)
+          with open(zp, 'rb') as fh:
+              zip_sha = hashlib.sha256(fh.read()).hexdigest()
+          expected_sha = os.environ.get('EXPECTED_SHA256', '').strip().lower()
+          if expected_sha:
+              if not re.fullmatch(r'[0-9a-f]{64}', expected_sha):
+                  die('expected_sha256 must be 64 hexadecimal characters (or left empty)')
+              if expected_sha != zip_sha:
+                  die('The ZIP does not match expected_sha256. Found ' + zip_sha + '. Was a different file uploaded?')
+          if not zipfile.is_zipfile(zp):
+              die('The file is not a valid ZIP archive')
+
+          entries = []
+          seen = set()
+          with zipfile.ZipFile(zp) as z:
+              infos = z.infolist()
+              if not infos or len(infos) > MAX_ENTRIES:
+                  die('ZIP must contain between 1 and %d entries (found %d)' % (MAX_ENTRIES, len(infos)))
+              total_declared = 0
+              for i in infos:
+                  raw = i.filename
+                  if not raw or len(raw) > 240:
+                      die('Unsafe ZIP entry name (empty or too long)')
+                  if any(ord(c) < 32 or ord(c) == 127 for c in raw) or '\\' in raw:
+                      die('Unsafe ZIP entry name (control or backslash characters): ' + ascii(raw))
+                  if raw.startswith('/') or re.match(r'^[A-Za-z]:', raw) or raw.endswith('//'):
+                      die('Unsafe ZIP entry name (absolute path): ' + ascii(raw))
+                  is_dir = raw.endswith('/')
+                  segs = raw.rstrip('/').split('/')
+                  for s in segs:
+                      if s in ('', '.', '..') or len(s) > 100:
+                          die('Path traversal or invalid segment in ZIP entry: ' + ascii(raw))
+                  if i.flag_bits & 0x1:
+                      die('Encrypted ZIP entries are not allowed: ' + ascii(raw))
+                  if i.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                      die('Unsupported compression method in: ' + ascii(raw))
+                  ftype = stat.S_IFMT((i.external_attr >> 16) & 0xFFFF)
+                  # type bits 0 = a ZIP tool that does not record them: treated as a plain file
+                  if ftype == stat.S_IFLNK:
+                      die('Symbolic links are not allowed in the ZIP: ' + ascii(raw))
+                  if ftype not in (0, stat.S_IFREG, stat.S_IFDIR):
+                      die('Special files are not allowed in the ZIP: ' + ascii(raw))
+                  key = '/'.join(segs).lower()
+                  if key in seen:
+                      die('Duplicate entry in ZIP: ' + ascii(raw))
+                  seen.add(key)
+                  if not is_dir:
+                      if i.file_size > MAX_FILE:
+                          die('File too large (limit 10 MB): ' + ascii(raw))
+                      if i.file_size > 1024 * 1024 and i.file_size > MAX_RATIO * max(i.compress_size, 1):
+                          die('Suspicious compression ratio (possible ZIP bomb): ' + ascii(raw))
+                      total_declared += i.file_size
+                  entries.append((i, segs, is_dir))
+              if total_declared > MAX_TOTAL:
+                  die('Total unpacked size is too large (limit 100 MB)')
+
+              tops = {segs[0] for _, segs, _ in entries}
+              if len(tops) != 1:
+                  die('ZIP must contain exactly one top-level project directory')
+              root = next(iter(tops))
+              files = {}
+              skipped_junk = 0
+              for i, segs, is_dir in entries:
+                  if len(segs) == 1:
+                      if not is_dir:
+                          die('Files at the top level of the ZIP: everything must be inside one project folder')
+                      continue
+                  rel_segs = segs[1:]
+                  rel = '/'.join(rel_segs)
+                  for s in rel_segs:
+                      if s.lower() in BAD_NAMES:
+                          die('Forbidden entry (git data, node_modules, build output or credentials): ' + ascii(rel))
+                  if is_dir:
+                      if rel_segs[0] not in ALLOWED_TOP_DIRS:
+                          die('Unexpected top-level folder in ZIP: ' + ascii(rel_segs[0]))
+                      continue
+                  base = rel_segs[-1]
+                  lower = base.lower()
+                  if lower in JUNK:
+                      skipped_junk += 1
+                      continue
+                  if lower.startswith('.env') and lower != '.env.example':
+                      die('Environment files are not allowed (only .env.example): ' + ascii(rel))
+                  if lower.endswith(BAD_SUFFIXES) or lower.startswith(BAD_PREFIXES):
+                      die('Key/credential or build-cache file not allowed: ' + ascii(rel))
+                  if len(rel_segs) > 1 and rel_segs[0] not in ALLOWED_TOP_DIRS:
+                      die('Unexpected top-level folder in ZIP: ' + ascii(rel_segs[0]))
+                  if rel_segs[0] == '.github':
+                      ok = len(rel_segs) == 2 or (len(rel_segs) == 3 and rel_segs[1] == 'workflows'
+                                                  and lower.endswith(('.yml', '.yaml')))
+                      if not ok:
+                          die('Unexpected file under .github: ' + ascii(rel))
+                  files[rel] = i
+
+              missing = [r for r in REQUIRED if r not in files]
+              if missing:
+                  die('Not a full project ZIP, missing: ' + ', '.join(missing))
+
+              stage = os.path.join(tmp, 'stage')
+              if os.path.exists(stage):
+                  shutil.rmtree(stage)
+              os.makedirs(stage)
+              total_read = 0
+              for rel, i in sorted(files.items()):
+                  data = bytearray()
+                  with z.open(i) as src:
+                      while True:
+                          chunk = src.read(65536)
+                          if not chunk:
+                              break
+                          data += chunk
+                          if len(data) > min(i.file_size, MAX_FILE):
+                              die('Entry is larger than it declares: ' + ascii(rel))
+                  if len(data) != i.file_size:
+                      die('Entry size mismatch: ' + ascii(rel))
+                  total_read += len(data)
+                  if total_read > MAX_TOTAL:
+                      die('Total unpacked size is too large (limit 100 MB)')
+                  text = bytes(data[:1024 * 1024]).decode('latin-1')
+                  for label, pat in CONTENT_PATTERNS:
+                      if pat.search(text):
+                          die('Possible secret (' + label + ') inside ' + ascii(rel))
+                  if rel.split('/')[-1].lower() == '.npmrc' and NPMRC_AUTH.search(text):
+                      die('.npmrc contains an auth token: ' + ascii(rel))
+                  if rel == 'package.json':
+                      try:
+                          pkg = json.loads(bytes(data).decode('utf-8'))
+                      except ValueError:
+                          die('package.json is not valid JSON')
+                      if pkg.get('name') != 'bnlinkvault' or not str(pkg.get('packageManager', '')).startswith('pnpm@'):
+                          die('package.json does not look like the BnlinkVault pnpm project')
+                  dst = os.path.join(stage, *rel.split('/'))
+                  os.makedirs(os.path.dirname(dst), exist_ok=True)
+                  with open(dst, 'wb') as out:
+                      out.write(data)
+                  mode = (i.external_attr >> 16) & 0o111
+                  os.chmod(dst, 0o755 if mode else 0o644)
+
+          with open(os.path.join(tmp, 'manifest.json'), 'w') as fh:
+              json.dump({'sha256': zip_sha, 'root': root, 'files': sorted(files)}, fh)
+          with open(os.environ['GITHUB_ENV'], 'a') as fh:
+              fh.write('ZIP_SHA256=%s\nZIP_NAME=%s\n' % (zip_sha, os.path.basename(zip_in)))
+          lines = [
+              '### ZIP validation: PASSED',
+              '- file: `%s`, %d bytes, sha256 `%s`' % (os.path.basename(zip_in), size, zip_sha),
+              '- %d project files, one top-level folder `%s`, junk files skipped: %d' % (len(files), root, skipped_junk),
+          ]
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as fh:
+              fh.write('\n'.join(lines) + '\n')
+          PY
+
+      - name: Dry run finished (nothing was written)
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "Dry run: the ZIP passed every check. Nothing was written. Run again with dry_run unticked to import."
+          echo "Dry run: the ZIP passed every check. Nothing was written." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Switch to chore/bootstrap (create from the default branch, or continue it)
+        if: ${{ !inputs.dry_run }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$TARGET_BRANCH"
-          rm -f "$ZIP_PATH"
-          cp -a "$TMP/$ROOT/." .
-          if [ "$HAS_PAT" != "true" ]; then
-            echo "Workflow files differing from this branch (NOT imported without IMPORT_PAT):"
-            git status --porcelain -- .github/workflows || true
-            git checkout HEAD -- .github/workflows 2>/dev/null || true
-            git clean -fdq -- .github/workflows
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+          if git show-ref --verify --quiet "refs/remotes/origin/$TARGET_BRANCH"; then
+            git checkout -q -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
+            echo "Continuing the existing $TARGET_BRANCH (new commit on top; history is kept)."
+          else
+            git checkout -q -B "$TARGET_BRANCH" "refs/remotes/origin/$DEFAULT_BRANCH"
+            echo "Creating $TARGET_BRANCH from $DEFAULT_BRANCH."
           fi
+
+      - name: Copy the validated files (adds and updates only; nothing is deleted)
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+
+          def die(msg):
+              print('::error::' + msg)
+              sys.exit(1)
+
+          repo = os.path.realpath(os.environ['GITHUB_WORKSPACE'])
+          tmp = os.environ['RUNNER_TEMP']
+          stage = os.path.join(tmp, 'stage')
+          files = json.load(open(os.path.join(tmp, 'manifest.json')))['files']
+          WF = '.github/workflows/'
+
+          def read(path):
+              with open(path, 'rb') as fh:
+                  return fh.read()
+
+          def put(rel, data, mode):
+              parts = rel.split('/')
+              cur = repo
+              for p in parts[:-1]:
+                  cur = os.path.join(cur, p)
+                  if os.path.islink(cur):
+                      die('Refusing to write through a symlink: ' + rel)
+                  if os.path.exists(cur) and not os.path.isdir(cur):
+                      die('A file blocks the folder ' + rel)
+              dst = os.path.join(repo, *parts)
+              if os.path.islink(dst) or os.path.isdir(dst):
+                  die('Refusing to overwrite a symlink or folder: ' + rel)
+              status = 'new'
+              if os.path.exists(dst):
+                  status = 'same' if read(dst) == data else 'updated'
+              os.makedirs(os.path.dirname(dst), exist_ok=True)
+              with open(dst, 'wb') as fh:
+                  fh.write(data)
+              os.chmod(dst, mode)
+              return status
+
+          counts = {'new': 0, 'updated': 0, 'same': 0}
+          wf_report = []
+          wanted = set()
+          for rel in files:
+              src = os.path.join(stage, *rel.split('/'))
+              data = read(src)
+              mode = 0o755 if os.stat(src).st_mode & 0o111 else 0o644
+              if rel.startswith(WF):
+                  name = rel[len(WF):]
+                  current = os.path.join(repo, '.github', 'workflows', name)
+                  if os.path.isfile(current) and read(current) == data:
+                      wf_report.append((name, 'identical to the current one (nothing to do)'))
+                      continue
+                  state = 'CHANGED version of an existing workflow' if os.path.exists(current) else 'NEW workflow'
+                  put('pending-workflows/' + name, data, 0o644)
+                  wanted.add('pending-workflows/' + name)
+                  wf_report.append((name, state + ' -> saved as pending-workflows/' + name))
+                  continue
+              counts[put(rel, data, mode)] += 1
+              wanted.add(rel)
+
+          tracked = subprocess.run(['git', 'ls-files', '-z'], check=True, capture_output=True).stdout.decode().split('\0')
+          extra = [t for t in tracked if t and t not in wanted and not t.startswith(WF)
+                   and not t.startswith('pending-workflows/')]
+
+          lines = ['### Import result',
+                   '- files added: %d, updated: %d, unchanged: %d' % (counts['new'], counts['updated'], counts['same']),
+                   '- files already in the repository but NOT in the ZIP (left untouched): %d' % len(extra)]
+          for t in extra[:40]:
+              lines.append('  - `%s`' % t)
+          if len(extra) > 40:
+              lines.append('  - ... and %d more' % (len(extra) - 40))
+          lines.append('- workflow files from the ZIP (not copied into .github/workflows):')
+          for name, text in wf_report:
+              lines.append('  - `%s`: %s' % (name, text))
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as fh:
+              fh.write('\n'.join(lines) + '\n')
+          with open(os.path.join(tmp, 'expected.json'), 'w') as fh:
+              json.dump(sorted(wanted), fh)
+          PY
+
+      - name: Commit and push to chore/bootstrap (normal push, never forced)
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
           git add -A
-          if git diff --cached --quiet; then echo "Nothing to import"; exit 0; fi
-          git commit -q -m "chore: import $(basename "$ZIP_PATH")"
-          git push --force origin "$TARGET_BRANCH"
-          echo "Imported into branch $TARGET_BRANCH: $(git diff --name-only HEAD~1 HEAD | wc -l) files changed"
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+          expected = json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'expected.json')))
+          staged = set(subprocess.run(['git', 'ls-files', '-z'], check=True, capture_output=True).stdout.decode().split('\0'))
+          dropped = [e for e in expected if e not in staged]
+          if dropped:
+              print('::error::These files were not added to git (probably ignored by .gitignore): ' + ', '.join(dropped[:20]))
+              sys.exit(1)
+          PY
+          if git diff --cached --quiet; then
+            echo "Nothing new to import: $TARGET_BRANCH already contains everything in this ZIP."
+            echo "Nothing new to import: $TARGET_BRANCH already contains everything in this ZIP." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git commit -q -m "chore: import $ZIP_NAME (sha256 $ZIP_SHA256)"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          {
+            echo "### Pushed to \`$TARGET_BRANCH\`"
+            echo "- commit: \`$(git rev-parse --short HEAD)\`"
+            echo "- Status is still: PHASE 2 IMPLEMENTED - UNVERIFIED (nothing has been verified by this import)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed commit $(git rev-parse --short HEAD) to $TARGET_BRANCH"
