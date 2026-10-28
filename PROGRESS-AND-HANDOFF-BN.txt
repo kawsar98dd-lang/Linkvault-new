@@ -117,3 +117,22 @@ My constraints: I work only from an Android phone and need step-by-step Bengali 
 Start by asking me to share the current GitHub Actions run result/screenshots if I have already uploaded/imported the ZIP. If not, guide me to upload BnlinkVault-marketplace-prep-0.2.3.zip to the repository root on main and run import-zip with dry_run=true first. Check the actual repository state and workflow instructions before any destructive or repeated action. Then handle one actual error at a time and keep all work on main.
 
 END OF HANDOFF
+
+
+============================================================
+ADDENDUM — LOCKFILE BOOTSTRAP DIAGNOSTICS (2026-10-28)
+============================================================
+User reported `generate-lockfile #5` failed. The screenshot only exposes the generic `bootstrap — Process completed with exit code 1`; it does NOT show the failing step or error line. Node.js 20 deprecation and ubuntu-latest migration notices are warnings/info, not proof of root cause.
+
+0.2.3 lockfile-diagnostics update:
+- `scripts/pin-better-auth.mjs` retries transient npm registry / OSV request failures up to 3 times. Security/version policy failures remain blocking; no bypass.
+- `generate-lockfile.yml` pins pnpm 10.8.0 explicitly, labels key steps, uploads diagnostic logs and writes per-step outcomes to the Actions Summary.
+- Bootstrap push targets only the repository default branch with a normal push; no temporary branch and no force push.
+- Tests updated to enforce main/default-branch policy.
+- Local check: `node --test scripts/__tests__/*.test.mjs` PASS 63/63 on Node.js 22.16.0.
+- Not performed: live npm/OSV resolution, pnpm install, lockfile generation, app typecheck/build, DB/RLS, security scanners, or GitHub Actions run. `pnpm-lock.yaml` is STILL absent; Phase 2 remains UNVERIFIED.
+
+Important Android import detail:
+`import-zip` deliberately saves changed `.github/workflows/**` files to `pending-workflows/` instead of overwriting active workflows. After importing this ZIP, copy `pending-workflows/generate-lockfile.yml` into `.github/workflows/generate-lockfile.yml` using GitHub editor and commit it on main/default branch, otherwise the new per-step summary workflow will not become active. The script retry change itself is imported normally.
+
+See `docs/development/LOCKFILE-BOOTSTRAP-FIX-2026-10-28-BN.md` for the exact next steps.

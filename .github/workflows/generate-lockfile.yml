@@ -1,9 +1,4 @@
-# One-time networked bootstrap. Phase 2 was authored WITHOUT registry access, so three things could not be done:
-#   1. resolve + verify the current stable Better Auth version (1.2.7 is below the 1.4.9 security floor)
-#   2. generate pnpm-lock.yaml (never hand-written or faked)
-#   3. run Prettier / the real TypeScript compiler
-# This workflow does them on a networked GitHub runner and updates the default/main branch only after required checks pass. It fails closed:
-# any unverifiable step stops the run; nothing is "skipped" or defaulted.
+# Networked dependency bootstrap. This workflow never fabricates a lockfile and never bypasses security gates.
 name: generate-lockfile
 on: workflow_dispatch
 permissions:
@@ -14,38 +9,71 @@ concurrency:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout default branch
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        id: pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+
+      - name: Set up Node.js
+        id: node
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Resolve the CURRENT STABLE Better Auth version, verify it, pin it EXACTLY
+
+      - name: Resolve current stable Better Auth and verify security policy
+        id: resolve
         run: node scripts/pin-better-auth.mjs
-      - name: Better Auth gate against the pinned version (policy floor + OSV; fails closed)
+
+      - name: Re-check pinned Better Auth against the security floor and OSV
+        id: gate
         run: node scripts/check-better-auth-advisory.mjs
-      - name: Generate pnpm-lock.yaml from the pinned catalog (no hand-written lockfile)
+
+      - name: Generate lockfile from the verified dependency catalog
+        id: lockfile
         run: pnpm install --lockfile-only
-      - name: Install from the generated lockfile (frozen)
+
+      - name: Install dependencies using the generated lockfile
+        id: install
         run: pnpm install --frozen-lockfile
-      - name: Prettier check (do not rewrite source automatically)
+
+      - name: Check formatting
+        id: format
         run: pnpm format:check
-      - name: TypeScript compile (blocking)
+
+      - name: TypeScript compile
+        id: typecheck
         run: pnpm typecheck 2>&1 | tee typecheck.log
-      - name: ESLint (blocking)
+
+      - name: ESLint
+        id: lint
         run: pnpm lint 2>&1 | tee lint.log
-      - name: Unit and architecture tests (blocking)
+
+      - name: Unit and architecture tests
+        id: tests
         run: pnpm test
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload diagnostic logs
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: bootstrap-reports
+          name: bootstrap-diagnostics
           path: |
             typecheck.log
             lint.log
           if-no-files-found: ignore
-      - name: Commit and push to the default/main branch (normal push, never forced)
+
+      - name: Commit lockfile and verified pin to the default branch
+        id: commit
+        if: success()
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
@@ -61,8 +89,40 @@ jobs:
           fi
           git commit -m "chore: pin verified Better Auth and add pnpm lockfile"
           git push origin "HEAD:refs/heads/$DEFAULT_BRANCH"
+
+      - name: Explain bootstrap result in the run summary
+        if: always()
+        env:
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          PNPM: ${{ steps.pnpm.outcome }}
+          NODE: ${{ steps.node.outcome }}
+          RESOLVE: ${{ steps.resolve.outcome }}
+          GATE: ${{ steps.gate.outcome }}
+          LOCKFILE: ${{ steps.lockfile.outcome }}
+          INSTALL: ${{ steps.install.outcome }}
+          FORMAT: ${{ steps.format.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          COMMIT: ${{ steps.commit.outcome }}
+        run: |
           {
-            echo "### Bootstrap complete"
-            echo "- Better Auth pin and lockfile generated; required checks passed."
-            echo "- Updated branch: $DEFAULT_BRANCH. No review branch or force-push is used."
+            echo "## Lockfile bootstrap diagnostics"
+            echo "| Step | Result |"
+            echo "|---|---|"
+            echo "| Checkout | $CHECKOUT |"
+            echo "| pnpm setup | $PNPM |"
+            echo "| Node setup | $NODE |"
+            echo "| Resolve Better Auth from npm registry + OSV | $RESOLVE |"
+            echo "| Security gate | $GATE |"
+            echo "| Generate pnpm-lock.yaml | $LOCKFILE |"
+            echo "| Frozen install | $INSTALL |"
+            echo "| Formatting | $FORMAT |"
+            echo "| TypeScript | $TYPECHECK |"
+            echo "| ESLint | $LINT |"
+            echo "| Tests | $TESTS |"
+            echo "| Commit to default branch | $COMMIT |"
+            echo
+            echo "A warning about Node.js action runtime or Ubuntu image migration is not itself a failure."
+            echo "If a security/version gate fails, the workflow intentionally does not create or commit a lockfile."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -116,10 +116,12 @@ test('the floating-version guard matches VALUES, not the "next" dependency key (
   assert.match('npx foo@latest', re);
 });
 
-test('bootstrap workflow can be re-run from its own branch (git checkout -B, not -b)', () => {
+test('bootstrap workflow commits only to the repository default branch (no temporary branch or force push)', () => {
   const t = read('generate-lockfile.yml');
-  assert.match(t, /git checkout -B chore\/bootstrap/);
-  assert.doesNotMatch(t, /git checkout -b chore\/bootstrap/);
+  assert.match(t, /DEFAULT_BRANCH: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(t, /git checkout -B "\$DEFAULT_BRANCH" "origin\/\$DEFAULT_BRANCH"/);
+  assert.match(t, /git push origin "HEAD:refs\/heads\/\$DEFAULT_BRANCH"/);
+  assert.doesNotMatch(t, /chore\/bootstrap|--force/);
 });
 
 test('Prettier ignores workflow files so the bootstrap push cannot be rejected for modifying .github/workflows', () => {
@@ -131,7 +133,7 @@ test('import-zip workflow (and its docs copy) is safe by construction', () => {
   // v6: the helper became a real workflow; scripts/__tests__/import-zip.test.mjs tests its behaviour in depth.
   for (const f of ['.github/workflows/import-zip.yml', 'docs/development/import-zip.workflow.yml']) {
     const t = readFileSync(join(REPO, f), 'utf8');
-    assert.match(t, /Do not run this from the default branch/);
+    assert.match(t, /Run this workflow from the repository default branch only/);
     assert.match(t, /Forbidden entry/);
     assert.match(t, /must contain exactly one top-level project directory/);
     assert.match(t, /Not a full project ZIP, missing/);
