@@ -97,10 +97,10 @@ security, semgrep) plus CodeQL/dependency-review → send me the failures. Prote
 
 - Evidence: `.npmrc` has `auto-install-peers=false` + `strict-peer-dependencies=true`; no manifest declared `webpack`;
   `apps/web` depends on `@sentry/nextjs` (used in `next.config.ts` and `src/instrumentation.ts`).
-- Fix (minimal, strictness preserved): `webpack: 5.98.0` added once to the catalog and once to `apps/web` devDependencies.
+- Earlier fix: an exact webpack pin was added to the catalog and `apps/web` devDependencies. The later observed run showed the 5.98.0 pin was still below the required peer range; see the 2026-10-28 addendum below.
 - Executed: `node --test scripts/__tests__` 45/45 pass (new `peer-deps.test.mjs`), boundaries, route declarations, secret scan,
   YAML/JSON parse. Better Auth gate still exits 1 on the UNRESOLVED pin (resolved on the runner by the bootstrap workflow).
-- NOT RUN: `pnpm install --lockfile-only`, frozen install, registry existence of `webpack@5.98.0`, typecheck, lint, Prettier,
+- NOT RUN: `pnpm install --lockfile-only`, frozen install, registry existence of `webpack@5.112.0`, typecheck, lint, Prettier,
   Vitest, PostgreSQL tests, build, Semgrep/Gitleaks/CodeQL/audit (network and services unavailable).
 - NOT changed: `eslint`, `next`, Sentry versions (deprecation warnings need the registry's exact message first).
 - Further unmet peers may surface after this one (pnpm strict mode); each must be fixed the same way, never bypassed.
@@ -152,3 +152,16 @@ The user supplied real GitHub Actions screenshots. In the observed `generate-loc
 A corrective package updates the bootstrap workflow to run `pnpm format` followed by `pnpm format:check`, while preserving blocking typecheck/lint/tests and the security gates. It stages tracked formatting changes only after all required checks pass, along with the generated lockfile and verified dependency pin. The workflow file itself is excluded from Prettier. Because `import-zip` does not copy `.github/workflows/**` directly, the changed workflow is placed in `pending-workflows/` by the importer and must be manually applied to `.github/workflows/generate-lockfile.yml` on the default/main branch.
 
 This is a workflow correction, not proof of green CI. PHASE 2 remains **IMPLEMENTED — UNVERIFIED** until actual runtime, database/RLS, build, and security checks pass.
+
+
+## Addendum v7 — observed peer dependency failure in generate-lockfile #8 (2026-10-28)
+
+**STATUS REMAINS: PHASE 2 IMPLEMENTED — UNVERIFIED.** The supplied screenshot for run #8 shows `pnpm install --lockfile-only` failing with `ERR_PNPM_PEER_DEP_ISSUES`; frozen install, formatting, TypeScript, ESLint, tests, and commit were skipped.
+
+- The log identifies the prior `webpack@5.98.0` pin as below a peer range shown as `^5.112.0`; catalog pin is now `5.112.0`.
+- The log also shows an OpenTelemetry API peer range capped below `1.10.0`, while `1.10.0` was resolved in the Sentry dependency tree; workspace override is restored to `@opentelemetry/api: 1.9.0`.
+- `.npmrc` remains strict (`strict-peer-dependencies=true`, `auto-install-peers=false`). No force flag, legacy peer-dependency mode, or disabled validation was introduced.
+- `pnpm-lock.yaml` is intentionally not fabricated. The registry must confirm the pins and generate a real lockfile.
+- The formatting fix in the 0.2.4 line is retained: the bootstrap workflow runs `pnpm format` then `pnpm format:check` before typecheck/lint/tests. **Important:** the importer does not directly replace `.github/workflows/**`; apply the updated workflow from `pending-workflows/generate-lockfile.yml` to `.github/workflows/generate-lockfile.yml` on `main` after import.
+
+**Not verified:** registry availability of webpack 5.112.0; actual lockfile generation; frozen install; Prettier; TypeScript; ESLint; tests; PostgreSQL/RLS; production build; Gitleaks/Semgrep; full CI. Do not mark Phase 2 complete.

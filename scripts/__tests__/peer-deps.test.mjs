@@ -26,7 +26,8 @@ test('apps/web satisfies the required webpack peer of @sentry/webpack-plugin: de
   const yaml = read('pnpm-workspace.yaml');
   const m = /^\s*webpack:\s*(\d+\.\d+\.\d+)\s*$/m.exec(yaml);
   assert.ok(m, 'exact webpack version pinned in the catalog');
-  assert.ok(Number(m[1].split('.')[0]) >= 5, 'webpack >= 5 (peer range is >=4.40.0)');
+  assert.ok(Number(m[1].split('.')[0]) > 5 || (Number(m[1].split('.')[0]) === 5 && Number(m[1].split('.')[1]) >= 112), 'webpack pin satisfies observed >=5.112.0 peer requirement');
+  assert.match(yaml, /^overrides:\n  "@opentelemetry\/api": 1\.9\.0$/m, 'Sentry peer compatibility is pinned below 1.10.0');
   // exactly one declaration point per package: no other manifest may declare webpack
   for (const group of ['apps', 'packages']) {
     for (const d of readdirSync(join(REPO, group))) {

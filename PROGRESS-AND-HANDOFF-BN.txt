@@ -1,5 +1,5 @@
 BNLINKVAULT / LINKVAULT — PROJECT PROGRESS & NEW-CHAT HANDOFF
-Package: BnlinkVault marketplace-prep 0.2.4 corrective workflow update
+Package: BnlinkVault marketplace-prep 0.2.5 peer-dependency + formatting workflow correction
 Date: 2026-10-28
 Purpose: এই ফাইলটি নতুন চ্যাটে প্রজেক্টের বর্তমান অবস্থা, বাকি কাজ এবং নিরাপদ পরবর্তী ধাপ বুঝিয়ে দেওয়ার জন্য।
 
@@ -125,3 +125,13 @@ ADDENDUM — 2026-10-28: generate-lockfile formatting blocker
 ব্যবহারকারীর GitHub Actions স্ক্রিনশটে Better Auth gate, lockfile generation এবং frozen install সফল; কিন্তু Prettier check 128/129 ফাইলে ব্যর্থ হয়েছে। TypeScript, ESLint, tests এবং lockfile commit ওই run-এ সম্পন্ন হয়নি। নতুন ZIP-এ bootstrap workflow-কে pnpm format চালিয়ে তারপর pnpm format:check করতে আপডেট করা হয়েছে; সব পরবর্তী blocking checks pass হলেই tracked formatting changes + lockfile/catalog normal commit হবে।
 গুরুত্বপূর্ণ: import-zip workflow .github/workflows/** কপি করে না; পরিবর্তিত generate-lockfile workflow pending-workflows/ এ যায়। সক্রিয় workflow GitHub editor দিয়ে main-এ আপডেট না করা পর্যন্ত নতুন আচরণ কার্যকর হবে না।
 বর্তমান অবস্থা: PHASE 2 IMPLEMENTED — UNVERIFIED. কোনো CI green বা production readiness দাবি করা হচ্ছে না।
+
+
+============================================================
+ADDENDUM — 2026-10-28: generate-lockfile #8 peer dependency failure
+============================================================
+The user's latest GitHub Actions screenshots show `ERR_PNPM_PEER_DEP_ISSUES` during `pnpm install --lockfile-only`. The previous webpack pin 5.98.0 did not satisfy the peer range shown in the log (>= 5.112.0); this package raises the exact pin to 5.112.0. The screenshot also reports an OpenTelemetry API peer range below 1.10.0 while 1.10.0 was resolved, so the workspace override for @opentelemetry/api is restored to 1.9.0. Strict peer checks remain enabled.
+
+IMPORTANT: this is a source/workflow correction, not proof the dependency versions exist or that installation passes. No lockfile was fabricated. Import the ZIP on main using the existing import-zip workflow; then copy the changed workflow from pending-workflows/generate-lockfile.yml into .github/workflows/generate-lockfile.yml using GitHub's editor on main, because the importer intentionally does not replace workflow files directly. After saving that workflow, rerun generate-lockfile once and review the complete log. If another peer conflict appears, capture it and fix the exact range; do not bypass strict checks.
+
+Current state remains PHASE 2 IMPLEMENTED — UNVERIFIED. The ZIP has not been run through real GitHub Actions, registry resolution, frozen install, TypeScript, ESLint, tests, PostgreSQL/RLS, build, or security scans here.

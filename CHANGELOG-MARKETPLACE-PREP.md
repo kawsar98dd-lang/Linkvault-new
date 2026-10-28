@@ -40,3 +40,12 @@ This release ZIP has been checked for archive integrity and targeted text/workfl
 - Updated static workflow tests to assert the current default/main-branch-only policy rather than an obsolete `chore/bootstrap` branch expectation.
 - Added Bengali audit/report notes based on the user's real GitHub Actions screenshots.
 - No lockfile was fabricated and no claim of CI green is made.
+
+
+## 0.2.5-prep peer-dependency correction (2026-10-28)
+
+- Updated the webpack catalog pin from 5.98.0 to 5.112.0 to match the peer range shown in `generate-lockfile #8`.
+- Restored an exact `@opentelemetry/api` workspace override to 1.9.0 to avoid the observed 1.10.0 peer-range conflict.
+- Kept strict peer dependency validation enabled; no force/bypass flags were added.
+- Retained the Prettier auto-format-then-check workflow correction.
+- No lockfile was fabricated and no CI/build/test success is claimed.
