@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
@@ -82,7 +82,7 @@ jobs:
       # re-CREATEs a dedicated database, proving migrations build the schema from an EMPTY database.
       PGPASS: ci-throwaway-superuser-pw
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
@@ -137,7 +137,7 @@ jobs:
       APP_RW_PASSWORD: canary-app-rw-password-5k3m9q2w
       APP_MIGRATOR_PASSWORD: canary-migrator-password-8n4b7v1c
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
@@ -213,7 +213,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Gitleaks (full history)
@@ -246,7 +246,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -299,7 +299,7 @@ jobs:
     if: github.event_name != 'pull_request'
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lockfile must be committed (fail closed, before any cache/install)
         run: |
           test -f pnpm-lock.yaml || { echo "::error::pnpm-lock.yaml is missing. Run the 'generate-lockfile' workflow and merge its branch."; exit 1; }
