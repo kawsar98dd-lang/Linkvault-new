@@ -127,13 +127,16 @@ test('Prettier ignores workflow files so the bootstrap push cannot be rejected f
   assert.match(ig, /^\.github\/workflows\/$/m);
 });
 
-test('import-zip helper (docs/development/import-zip.workflow.yml) is safe by construction', () => {
-  const t = readFileSync(join(REPO, 'docs/development/import-zip.workflow.yml'), 'utf8');
-  assert.match(t, /refusing to write to the default branch/);
-  assert.match(t, /unsafe or secret-bearing entries/);
-  assert.match(t, /must contain exactly one top-level project directory/);
-  assert.match(t, /package\.json missing: not a full project ZIP/);
-  assert.match(t, /on:\s*\n\s+workflow_dispatch:/); // manual only
-  assert.doesNotMatch(t, /--delete|rm -rf \.|git push[^\n]*\b(main|master)\b|set -x/);
-  assert.match(t, /secrets\.IMPORT_PAT \|\| github\.token/);
+test('import-zip workflow (and its docs copy) is safe by construction', () => {
+  // v6: the helper became a real workflow; scripts/__tests__/import-zip.test.mjs tests its behaviour in depth.
+  for (const f of ['.github/workflows/import-zip.yml', 'docs/development/import-zip.workflow.yml']) {
+    const t = readFileSync(join(REPO, f), 'utf8');
+    assert.match(t, /Do not run this from the default branch/);
+    assert.match(t, /Forbidden entry/);
+    assert.match(t, /must contain exactly one top-level project directory/);
+    assert.match(t, /Not a full project ZIP, missing/);
+    assert.match(t, /on:\s*\n\s+workflow_dispatch:/); // manual only
+    assert.doesNotMatch(t, /--delete|rm -rf \.|git push[^\n]*(--force|\b(main|master)\b)|set -x/);
+    assert.doesNotMatch(t, /secrets\./); // no personal access token: the built-in token only
+  }
 });

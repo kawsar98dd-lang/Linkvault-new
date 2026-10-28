@@ -24,7 +24,7 @@ fields; the integration tests and typecheck on the networked runner will show ex
 
 ## Lockfile
 None exists, and none is hand-written. The `generate-lockfile` workflow produces `pnpm-lock.yaml` (plus the verified
-Better Auth pin and Prettier formatting) on branch `chore/bootstrap` for review. CI refuses to run without a lockfile
+Better Auth pin and Prettier formatting) on the default branch after required checks pass. CI refuses to run without a lockfile
 and always installs with `--frozen-lockfile`.
 
 ## Other pins

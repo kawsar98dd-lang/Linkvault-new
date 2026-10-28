@@ -1,15 +1,15 @@
-# import-zip: copies a COMPLETE project ZIP into the review branch "chore/bootstrap" (never into main).
+# import-zip: validates a complete project ZIP uploaded to the default/main branch, then adds/updates files on main.
+# It never force-pushes or deletes project source files. On successful import it removes ONLY the uploaded ZIP file.
 #
-# How the ZIP reaches this workflow: you upload it to a NEW branch of this repository (for example "upload-v5")
-# with GitHub's "Add file > Upload files", then start this workflow FROM THAT BRANCH. GitHub Actions cannot see
-# files on your phone, and this workflow never downloads anything from the internet.
+# How the ZIP reaches this workflow: upload it to the repository root on main, then run this workflow from main.
+# GitHub Actions cannot see files on your phone; the ZIP must first be committed to the repository.
 #
 # Safety summary:
-#   - manual only (workflow_dispatch); refuses to run from the default branch or from chore/bootstrap itself
+#   - manual only (workflow_dispatch); must be run from the default branch (normally main)
 #   - the ZIP is fully validated BEFORE anything is extracted (see the "Validate" step)
 #   - nothing inside the ZIP is ever executed
-#   - writes only to chore/bootstrap, with a normal push (no force); never touches main or other branches
-#   - never deletes anything from the repository
+#   - writes to the default/main branch with a normal push (no force); no other branches are used
+#   - removes only the uploaded ZIP after a successful apply; no project source files are deleted
 #   - .github/workflows/** from the ZIP is NOT copied (GitHub's built-in token may not change workflow files, and
 #     this keeps your current CI untouched); changed/new workflow files are saved in pending-workflows/ instead
 name: import-zip
@@ -20,7 +20,7 @@ on:
       zip_path:
         description: 'Path of the ZIP inside the branch you start this run from'
         required: true
-        default: 'LinkVault-Phase-2-FULL-PROJECT-v5.zip'
+        default: 'BnlinkVault-marketplace-prep-0.2.2.zip'
       dry_run:
         description: 'Only check the ZIP, do not write anything (keep ticked for the first run)'
         type: boolean
@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TARGET_BRANCH: chore/bootstrap
+  TARGET_BRANCH: ${{ github.event.repository.default_branch }}
 
 jobs:
   import:
@@ -52,7 +52,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Refuse to run from the wrong branch
+      - name: Require the default/main branch
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
@@ -61,9 +61,8 @@ jobs:
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
           [ "$REF_TYPE" = "branch" ] || fail "Start this workflow from a branch (not a tag)."
-          [ "$REF_NAME" != "$DEFAULT_BRANCH" ] || fail "Do not run this from the default branch. Upload the ZIP to a NEW branch (e.g. upload-v5) and choose that branch under 'Use workflow from'."
-          [ "$REF_NAME" != "$TARGET_BRANCH" ] || fail "Do not run this from $TARGET_BRANCH. Choose the branch that holds the uploaded ZIP."
-          echo "Started from branch: $REF_NAME"
+          [ "$REF_NAME" = "$DEFAULT_BRANCH" ] || fail "Run this workflow from the repository default branch only."
+          echo "Started from default branch: $REF_NAME"
 
       - name: Validate the ZIP and extract it into a private staging folder
         env:
@@ -273,7 +272,7 @@ jobs:
           echo "Dry run: the ZIP passed every check. Nothing was written. Run again with dry_run unticked to import."
           echo "Dry run: the ZIP passed every check. Nothing was written." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Switch to chore/bootstrap (create from the default branch, or continue it)
+      - name: Stay on the default/main branch
         if: ${{ !inputs.dry_run }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -281,14 +280,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
-          if git show-ref --verify --quiet "refs/remotes/origin/$TARGET_BRANCH"; then
-            git checkout -q -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
-            echo "Continuing the existing $TARGET_BRANCH (new commit on top; history is kept)."
-          else
-            git checkout -q -B "$TARGET_BRANCH" "refs/remotes/origin/$DEFAULT_BRANCH"
-            echo "Creating $TARGET_BRANCH from $DEFAULT_BRANCH."
-          fi
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          git checkout -q -B "$DEFAULT_BRANCH" "refs/remotes/origin/$DEFAULT_BRANCH"
+          echo "Applying validated ZIP to $DEFAULT_BRANCH with a normal push; no other branch is used."
 
       - name: Copy the validated files (adds and updates only; nothing is deleted)
         if: ${{ !inputs.dry_run }}
@@ -374,10 +368,15 @@ jobs:
               json.dump(sorted(wanted), fh)
           PY
 
-      - name: Commit and push to chore/bootstrap (normal push, never forced)
+      - name: Remove only the uploaded ZIP, then commit and push to main (normal push, never forced)
         if: ${{ !inputs.dry_run }}
+        env:
+          ZIP_PATH: ${{ inputs.zip_path }}
         run: |
           set -euo pipefail
+          # Remove only the ZIP supplied as workflow input, after its contents have been validated and staged.
+          # This avoids leaving the archive in the source repository. No project source file is deleted.
+          if [ -f "$ZIP_PATH" ]; then git rm -- "$ZIP_PATH"; fi
           git add -A
           python3 - <<'PY'
           import json, os, subprocess, sys
@@ -396,8 +395,8 @@ jobs:
           git commit -q -m "chore: import $ZIP_NAME (sha256 $ZIP_SHA256)"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
           {
-            echo "### Pushed to \`$TARGET_BRANCH\`"
+            echo "### Pushed to default branch \`$TARGET_BRANCH\`"
             echo "- commit: \`$(git rev-parse --short HEAD)\`"
-            echo "- Status is still: PHASE 2 IMPLEMENTED - UNVERIFIED (nothing has been verified by this import)"
+            echo "- Status is still: PHASE 2 IMPLEMENTED - UNVERIFIED (ZIP validation is not a build/security verification)"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "Pushed commit $(git rev-parse --short HEAD) to $TARGET_BRANCH"

@@ -1,0 +1,119 @@
+BNLINKVAULT / LINKVAULT — PROJECT PROGRESS & NEW-CHAT HANDOFF
+Package: BnlinkVault marketplace-prep 0.2.3
+Date: 2026-10-28
+Purpose: এই ফাইলটি নতুন চ্যাটে প্রজেক্টের বর্তমান অবস্থা, বাকি কাজ এবং নিরাপদ পরবর্তী ধাপ বুঝিয়ে দেওয়ার জন্য।
+
+============================================================
+1. PROJECT GOAL
+============================================================
+BnlinkVault (আগের নাম/বেস: LinkVault) হলো Smart Link Management & Monetization SaaS বানানোর প্রজেক্ট। লক্ষ্য হলো marketplace-এ বিক্রির উপযোগী, নিরাপদ, ইনস্টলযোগ্য ও ডকুমেন্টেড product তৈরি করা। এখনকার ZIP-কে সম্পূর্ণ বা বিক্রির জন্য প্রস্তুত SaaS বলা যাবে না।
+
+User constraints:
+- ব্যবহারকারী Android ফোন থেকে কাজ করেন; কোড নিজে লেখা কঠিন। কপি-পেস্টযোগ্য, ধাপে ধাপে নির্দেশনা দিতে হবে।
+- যতটা সম্ভব বিনামূল্যের টুল/সার্ভিস ব্যবহার করতে হবে; খরচ হলে আগে জানাতে হবে।
+- কোনো existing source, auth, database, API বা security feature অকারণে মুছবেন/বদলাবেন না।
+- শুধু repository-র main/default branch ব্যবহার করতে হবে। নতুন branch/PR workflow প্রস্তাব করবেন না।
+- CI বা production check সফল হয়েছে—এমন দাবি কেবল বাস্তব GitHub Actions/রান লগ দেখা গেলে করা যাবে।
+- প্রতিটি আপডেট ZIP-এর মধ্যে audit/status/next steps TXT বা MD রাখতে হবে।
+
+============================================================
+2. CURRENT PACKAGE / BASE
+============================================================
+বর্তমান হ্যান্ডঅফের ভিত্তি: BnlinkVault-marketplace-prep-0.2.2.zip, যেটি এই 0.2.3 প্যাকেজে মূলত নতুন বাংলা progress/handoff TXT যোগ করে repack করা হয়েছে। 0.2.3-এ customer-facing SaaS feature যোগ করা হয়েছে বলে দাবি করা হচ্ছে না।
+
+আগের দুইটি source ZIP তুলনায় Linkvault-new-chore-bootstrap (1).zip-কে বেশি সম্পূর্ণ base হিসেবে বেছে নেওয়া হয়েছিল, কারণ এতে অতিরিক্ত bootstrap/test workflow files ছিল। 0.2.2-এ সেই line-এর প্রস্তুত করা source/workflow/docs অন্তর্ভুক্ত আছে।
+
+ZIP integrity: 0.2.2 source archive খুলে পরীক্ষা করা হয়েছিল; 200 entries, zipfile.testzip() = no corrupt entry. 0.2.3 তৈরি করার পরে archive integrity আবার পরীক্ষা করা হয়েছে—এটি শুধু ZIP integrity; app build/test নয়।
+
+============================================================
+3. FOUNDATION ALREADY PRESENT (CODE PRESENT ≠ PRODUCTION VERIFIED)
+============================================================
+- Next.js web app shell, health/readiness endpoints
+- Hono API and Zod/OpenAPI route declarations
+- Better Auth integration foundation
+- PostgreSQL + Drizzle schema/migrations and tenant/RLS design
+- Workspace/member/invitation foundations
+- Authorization declarations, audit logging, idempotency and structured logging
+- Security headers, CSRF foundations, secret/bundle scan scripts
+- GitHub Actions CI, CodeQL, dependency review, import ZIP and dependency bootstrap workflows
+- Bengali marketplace readiness roadmap and Android workflow notes
+
+এগুলোর কিছু static inspection/test হয়েছে; এর মানে এই নয় যে প্রতিটি runtime, database বা production-এ যাচাই করা হয়েছে।
+
+============================================================
+4. IMPORTANT BLOCKERS — PHASE 2 IS NOT VERIFIED
+============================================================
+PHASE-2-VERIFICATION-STATUS.md-এ status স্পষ্ট: “PHASE 2 IMPLEMENTED — UNVERIFIED”.
+
+সবচেয়ে গুরুত্বপূর্ণ blocker:
+1. pnpm-workspace.yaml-এ better-auth version এখনও ইচ্ছাকৃতভাবে 0.0.0-UNRESOLVED; registry থেকে নিরাপদ stable version resolve এবং advisory check করতে হবে।
+2. pnpm-lock.yaml নেই; networked GitHub workflow দিয়ে সত্যিকারের lockfile generate করতে হবে—নিজে বানানো/নকল lockfile নয়।
+3. GitHub Actions-এ generate-lockfile workflow ও CI ফলাফল বাস্তবে যাচাই করতে হবে।
+4. real pnpm install/frozen install, TypeScript typecheck, ESLint, Prettier, Vitest, next build এখনও এখানে সম্পূর্ণ run হয়নি।
+5. PostgreSQL fresh migration, tenant isolation/RLS, cross-tenant access, IDOR, role grants, session/CSRF/authz/idempotency integration tests বাস্তবে run হয়নি।
+6. Gitleaks, Semgrep, CodeQL, dependency review/audit এবং browser bundle secret scan-এর সবগুলো বাস্তব GitHub runner-এ green প্রমাণিত নয়।
+7. Next.js + PostgreSQL production hosting compatibility/actual deployment পরীক্ষা করা হয়নি। Cloudflare Pages একাই PostgreSQL host করে না; D1 PostgreSQL-এর drop-in replacement নয়।
+
+আগের static/offline checks-এর রিপোর্টে scripts test count বিভিন্ন revision-এ 41/41, 45/45 এবং 53/53 হয়েছে বলে লেখা আছে। এগুলো স্থানীয় static/script checks; এগুলোকে full app test, CI green বা production readiness বলা যাবে না। বর্তমান authoritative status হলো: Phase 2 unverified.
+
+============================================================
+5. CORE PRODUCT FEATURES STILL MISSING / INCOMPLETE
+============================================================
+MVP 1 — Link core:
+- short link create/list/update/archive/delete
+- unique short-code generation and collision handling
+- safe redirect endpoint
+- URL validation, rate limits, abuse reporting
+- link ownership and cross-tenant/IDOR tests
+
+MVP 2 — Customer experience:
+- complete responsive customer dashboard and onboarding
+- link table, search/filter/pagination
+- click tracking and useful analytics
+- loading/empty/error states
+
+MVP 3 — Monetization:
+- plan definitions and server-enforced quotas
+- payment-provider adapter selected for intended marketplace/customer region
+- verified webhooks, idempotent billing events, subscription lifecycle, receipts/history/cancellation
+
+MVP 4 — Premium/admin:
+- custom domains + DNS verification
+- expiry/password rules where appropriate
+- team roles, audit views, export
+- admin/support tools, monitoring, abuse controls
+
+Privacy policy, terms, support, installation/deployment documentation, licensing/marketplace packaging and final release acceptance also remain to be completed/reviewed.
+
+============================================================
+6. REQUIRED NEXT STEPS — DO NOT JUMP TO FEATURES YET
+============================================================
+Step A — Verify which ZIP/source is actually in the user's GitHub repository and whether the repository default branch is main. Do not overwrite the repo blindly.
+
+Step B — User uploads BnlinkVault-marketplace-prep-0.2.3.zip to the repository root on main (unless a newer ZIP has since been prepared). Commit the ZIP normally. Do not create a new branch.
+
+Step C — In GitHub Actions, run “import-zip” from main with dry_run=true first. Review summary/SHA and validation. If successful, run it again with dry_run=false and the exact ZIP path. Do not repeat apply blindly after a failure. The workflow is intended to validate the ZIP, copy source files without force-push, and remove only the uploaded ZIP after successful apply. Confirm the workflow's exact behavior in the current repository before relying on it.
+
+Step D — Run “generate-lockfile” from main. It should resolve Better Auth and create pnpm-lock.yaml only after checks. If it fails, do not bypass the gate, do not hand-write lockfile, and do not claim success. Capture the failing step and log/summary or screenshot and bring it to the next chat for diagnosis.
+
+Step E — Only after dependency/bootstrap succeeds, inspect CI, CodeQL and dependency-review results. Fix the real reported errors incrementally while preserving security gates. Do not start core product feature development until Phase 2 exit criteria are met, especially DB/RLS and typecheck/build checks.
+
+Step F — After Phase 2 is verified, implement MVP-1 in small, reviewable steps, then customer dashboard/analytics, then billing, then premium features. Keep all changes on main and maintain the ZIP's progress report.
+
+If the current repository's workflows differ from the ZIP, do not assume the ZIP has already been imported. Read the actual repository workflow run and state first.
+
+============================================================
+7. FREE / MARKETPLACE EXPECTATIONS
+============================================================
+The development process can start using free tools, but “permanently free at any scale” cannot be promised. Hosting/database/email/payment services may have quotas, regional restrictions or paid tiers. Marketplace vendor eligibility, review and fees must be checked against the chosen marketplace's current rules. Do not list this foundation as a completed SaaS until all core features and verification are finished.
+
+============================================================
+8. NEW CHAT WORKING PROMPT
+============================================================
+I am continuing the BnlinkVault / LinkVault Smart Link Management & Monetization SaaS project. Please first read the uploaded ZIP's PROGRESS-AND-HANDOFF-BN.txt, PHASE-2-VERIFICATION-STATUS.md, NEXT-STEPS-0.2.2-BN.md and relevant workflows. Treat “PHASE 2 IMPLEMENTED — UNVERIFIED” as the actual status unless I provide real newer GitHub Actions logs proving otherwise.
+
+My constraints: I work only from an Android phone and need step-by-step Bengali instructions and copy/paste actions; prefer free services; preserve existing source/auth/database/API/security; use only main/default branch and never create a separate branch; never invent test results or say GitHub/CI passed without evidence; place updated progress/audit/next-step reports inside every ZIP. Do not jump to feature work before resolving Better Auth version + advisory check, generating the real pnpm-lock.yaml, and verifying CI/typecheck/lint/tests/PostgreSQL RLS/build.
+
+Start by asking me to share the current GitHub Actions run result/screenshots if I have already uploaded/imported the ZIP. If not, guide me to upload BnlinkVault-marketplace-prep-0.2.3.zip to the repository root on main and run import-zip with dry_run=true first. Check the actual repository state and workflow instructions before any destructive or repeated action. Then handle one actual error at a time and keep all work on main.
+
+END OF HANDOFF

@@ -20,7 +20,7 @@ Neon branching: the workflow foundation is the `database` job's disposable datab
 
 ## First-run order (everything is blocked until step 1 succeeds)
 1. Run **generate-lockfile** (Actions tab). It resolves and verifies the Better Auth pin, generates `pnpm-lock.yaml`,
-   runs Prettier, and attaches real `tsc`/ESLint logs; merge branch `chore/bootstrap`.
+   runs Prettier, and attaches real `tsc`/ESLint logs; run on the default branch; no separate branch is used.
 2. Open a PR: `ci` (static, database, web, security, semgrep), `codeql`, `dependency-review` run.
 3. Fix whatever the first real runs reveal (TypeScript, ESLint, SQL, Better Auth API drift).
 

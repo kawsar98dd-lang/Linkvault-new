@@ -21,8 +21,13 @@ CSP report-only, CSRF, secret scanning, browser-bundle secret scanning, CI.
 ## What does NOT exist (by design)
 Links, redirects, gateways, analytics, custom domains, billing, dashboards UI, legacy-link migration.
 
+## Marketplace preparation and deployment
+- **Current release state:** foundation only; not yet a sellable, production-ready SaaS. See `MARKETPLACE-READINESS-ROADMAP-BN.md`.
+- **Hosting:** the current app requires Node.js + PostgreSQL. It is not a static Cloudflare Pages app. Cloudflare deployment would need a verified Next.js-on-Workers adapter and a separately hosted PostgreSQL database; neither is configured or verified in this ZIP. Do not deploy this release to production yet.
+- **Phone workflow:** see `docs/development/android-upload.md` and `docs/development/android-next-steps-bn.md` for the safe GitHub Actions workflow steps. No coding or Git client is required, but a GitHub Actions run is required to verify dependencies/build.
+
 ## Uploading from a phone
-See `docs/development/android-upload.md` (one ZIP + an extraction workflow; no git client needed).
+See `docs/development/android-upload.md` (one ZIP + an extraction workflow; no git client needed; main branch only).
 
 ## Layout
 ```

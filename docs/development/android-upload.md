@@ -1,20 +1,12 @@
-# Getting the full project into GitHub from a phone (no git client)
+# Android-only upload and verification (main branch)
 
-Hidden items (`.github`, `.gitignore`, `.npmrc`) and nested folders cannot be selected reliably in an Android file
-picker, and the GitHub web uploader accepts at most 100 files at a time. Upload **one ZIP file** instead and let a
-workflow extract it.
+This project is being maintained on the repository default branch only. Do not create a review branch for this workflow.
 
-1. In the repository on the web: **Add file → Create new file**, name it `.github/workflows/import-zip.yml`, paste the
-   contents of `docs/development/import-zip.workflow.yml` (from this project), commit to the default branch.
-2. **Add file → Upload files**, choose `LinkVault-Phase-2-FULL-PROJECT-v5.zip`, and select
-   **"Create a new branch for this commit"** (e.g. `upload-v5`). Do **not** commit it to `main`.
-3. **Actions → import-zip → Run workflow**: *Use workflow from* = `upload-v5`; keep the defaults. The project is
-   extracted into the new branch `chore/import-v5` (nothing is deleted; the default branch is never written).
-4. **Actions → generate-lockfile → Run workflow** with *Use workflow from* = `chore/import-v5`. It resolves and verifies
-   the Better Auth pin, generates the lockfile, formats code and writes branch `chore/bootstrap` (replacing the old one).
-5. Open a pull request `chore/bootstrap → main`; CI (`ci`, CodeQL, dependency-review) runs. Merge only when green.
+1. Upload the release ZIP to the repository root on `main` using GitHub's **Add file → Upload files**, then commit it.
+2. Open **Actions → import-zip → Run workflow**. Select the default branch under **Use workflow from**.
+3. Set `zip_path` to the exact uploaded ZIP filename. Run once with `dry_run=true`.
+4. If and only if the dry run succeeds, run again with `dry_run=false`. The workflow validates the ZIP before extraction, does not execute its contents, adds/updates project files without deleting other project files, and removes only the uploaded ZIP after applying it.
+5. Then run **Actions → generate-lockfile → Run workflow**. It resolves and checks Better Auth, generates the lockfile, and runs required checks. It should push to the default branch only if required checks pass. A normal push may be rejected by branch protection; do not disable protections merely to force the push.
+6. A successful import or lockfile workflow is not proof of production readiness. Read workflow summaries and artifacts.
 
-Workflow files (`.github/workflows/*`) are not updated by step 3 unless a secret `IMPORT_PAT` exists (a personal access
-token with `repo` + `workflow` scope), because GitHub's built-in token may not modify workflow files. Only
-`generate-lockfile.yml` differs between v3 and v5; it works unchanged when started from a branch other than
-`chore/bootstrap` (as in step 4).
+The ZIP importer does not install dependencies on your phone. GitHub-hosted runners do the checks. The app still requires Node.js and PostgreSQL; Cloudflare production deployment is not configured or verified in this release.

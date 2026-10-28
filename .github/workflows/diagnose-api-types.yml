@@ -1,0 +1,130 @@
+# READ-ONLY diagnostic (throw-away): gathers evidence about the `Context<never, ...>` typecheck failure in
+# packages/api. It pushes nothing, merges nothing and needs no credentials. Do NOT merge this file into main.
+# It starts automatically when a branch named diag/<anything> is pushed (see the instructions you were given).
+name: diagnose-api-types
+on:
+  push:
+    branches: ['diag/**']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Record which commit and which branches are being inspected
+        run: |
+          mkdir -p evidence
+          {
+            echo "checked-out HEAD: $(git rev-parse HEAD)"
+            echo "--- recent commits of this checkout"
+            git log --oneline -5
+            echo "--- remote branches"
+            git branch -r
+            DEFAULT_BRANCH="${GITHUB_REF_NAME}"
+            echo "--- latest commits of origin/${DEFAULT_BRANCH}"
+            git log --oneline -5 "origin/${DEFAULT_BRANCH}" || echo "default branch history not found"
+            echo "--- pnpm-lock.yaml present in this checkout: $(test -f pnpm-lock.yaml && echo yes || echo no)"
+            grep -n "better-auth" pnpm-workspace.yaml
+          } > evidence/git.txt 2>&1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install with the repository's own documented process (nothing is committed)
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ] && ! grep -q 'UNRESOLVED' pnpm-workspace.yaml; then
+            pnpm install --frozen-lockfile
+          else
+            node scripts/pin-better-auth.mjs
+            pnpm install --lockfile-only
+            pnpm install --frozen-lockfile
+          fi
+      - name: Collect dependency evidence
+        run: |
+          {
+            echo "node $(node -v)"
+            echo "pnpm $(pnpm -v)"
+            echo "typescript $(pnpm --filter @bnlinkvault/api exec tsc -v)"
+            echo "hono (api) $(grep '"version"' packages/api/node_modules/hono/package.json)"
+            echo "@hono/zod-openapi (api) $(grep '"version"' packages/api/node_modules/@hono/zod-openapi/package.json)"
+          } > evidence/versions.txt 2>&1 || true
+          pnpm why hono -r > evidence/why-hono.txt 2>&1 || true
+          pnpm why @hono/zod-openapi -r > evidence/why-zod-openapi.txt 2>&1 || true
+          ls -d node_modules/.pnpm/hono@* node_modules/.pnpm/@hono+* node_modules/.pnpm/@asteasolutions+* > evidence/store-dirs.txt 2>&1 || true
+          ZO="$(ls -d node_modules/.pnpm/@hono+zod-openapi@*/node_modules/@hono/zod-openapi | head -n 1)"
+          {
+            echo "zod-openapi directory: $ZO"
+            echo "hono used by zod-openapi: $(readlink -f "$ZO/../../hono")"
+            echo "hono used by packages/api: $(readlink -f packages/api/node_modules/hono)"
+          } > evidence/hono-identity.txt 2>&1 || true
+          cp "$ZO/package.json" evidence/zod-openapi.package.json || true
+          (cd "$ZO" && find dist \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \)) > evidence/zod-openapi-dts-list.txt 2>&1 || true
+          while read -r f; do
+            mkdir -p "evidence/zod-openapi/$(dirname "$f")"
+            cp "$ZO/$f" "evidence/zod-openapi/$f"
+          done < evidence/zod-openapi-dts-list.txt
+      - name: Type experiment (a temporary file is compiled and never committed)
+        run: |
+          cat > packages/api/src/__diag.ts <<'TS'
+          import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+          import type { MiddlewareHandler } from 'hono';
+          import type { ApiEnv } from './types.ts';
+
+          interface DiagEnv {
+            Variables: { session: { userId: string } };
+          }
+          const mw: MiddlewareHandler<DiagEnv> = async (_c, next) => {
+            await next();
+          };
+          const mwList: MiddlewareHandler<DiagEnv>[] = [mw];
+          const mwTuple: [MiddlewareHandler<DiagEnv>] = [mw];
+          const mwRest: [MiddlewareHandler<DiagEnv>, ...MiddlewareHandler<DiagEnv>[]] = [mw];
+          const ok = { 200: { description: 'ok', content: { 'application/json': { schema: z.object({ id: z.string() }) } } } } as const;
+          const mwApi: MiddlewareHandler<ApiEnv> = async (_c, next) => {
+            await next();
+          };
+          const mwApiList: MiddlewareHandler<ApiEnv>[] = [mwApi];
+
+          export const app = new OpenAPIHono<DiagEnv>();
+          app.openapi(createRoute({ method: 'get', path: '/v0-none', responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          app.openapi(createRoute({ method: 'get', path: '/v1-array', middleware: mwList, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          app.openapi(createRoute({ method: 'get', path: '/v2-single', middleware: mw, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          app.openapi(createRoute({ method: 'get', path: '/v3-tuple1', middleware: mwTuple, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          app.openapi(createRoute({ method: 'get', path: '/v4-resttuple', middleware: mwRest, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          app.openapi(createRoute({ method: 'get', path: '/v5-asconst', middleware: [mw] as const, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+
+          export const based = new OpenAPIHono<DiagEnv>().basePath('/api/v1');
+          based.openapi(createRoute({ method: 'get', path: '/v6-based-none', responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          based.openapi(createRoute({ method: 'get', path: '/v7-based-array', middleware: mwList, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+
+          export const real = new OpenAPIHono<ApiEnv>();
+          real.openapi(createRoute({ method: 'get', path: '/v8-real-none', responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          real.openapi(createRoute({ method: 'get', path: '/v9-real-array', middleware: mwApiList, responses: ok }), (c) => c.json({ id: c.get('session').userId }, 200));
+          TS
+          cat -n packages/api/src/__diag.ts > evidence/diag-source.txt
+          set +e
+          pnpm --filter @bnlinkvault/api exec tsc -p tsconfig.json --noEmit > evidence/tsc-api-full.txt 2>&1
+          echo "tsc exit code: $?" >> evidence/tsc-api-full.txt
+          set -e
+          grep -E "__diag\.ts" evidence/tsc-api-full.txt | cut -c1-220 > evidence/diag-errors.txt || true
+          {
+            echo "### Type experiment: errors per variant (line numbers refer to evidence/diag-source.txt)"
+            echo "A variant with NO error line passes (handler context typed correctly)."
+            cat evidence/diag-errors.txt
+            echo "### versions"
+            cat evidence/versions.txt
+            echo "### hono identity"
+            cat evidence/hono-identity.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm packages/api/src/__diag.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diag-evidence
+          path: evidence/
+          if-no-files-found: warn
