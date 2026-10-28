@@ -30,7 +30,7 @@ jobs:
             echo "--- pnpm-lock.yaml present in this checkout: $(test -f pnpm-lock.yaml && echo yes || echo no)"
             grep -n "better-auth" pnpm-workspace.yaml
           } > evidence/git.txt 2>&1
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
