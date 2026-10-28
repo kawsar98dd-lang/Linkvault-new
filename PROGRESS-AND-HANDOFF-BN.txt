@@ -1,5 +1,5 @@
 BNLINKVAULT / LINKVAULT — PROJECT PROGRESS & NEW-CHAT HANDOFF
-Package: BnlinkVault marketplace-prep 0.2.3
+Package: BnlinkVault marketplace-prep 0.2.4 corrective workflow update
 Date: 2026-10-28
 Purpose: এই ফাইলটি নতুন চ্যাটে প্রজেক্টের বর্তমান অবস্থা, বাকি কাজ এবং নিরাপদ পরবর্তী ধাপ বুঝিয়ে দেওয়ার জন্য।
 
@@ -120,19 +120,8 @@ END OF HANDOFF
 
 
 ============================================================
-ADDENDUM — LOCKFILE BOOTSTRAP DIAGNOSTICS (2026-10-28)
+ADDENDUM — 2026-10-28: generate-lockfile formatting blocker
 ============================================================
-User reported `generate-lockfile #5` failed. The screenshot only exposes the generic `bootstrap — Process completed with exit code 1`; it does NOT show the failing step or error line. Node.js 20 deprecation and ubuntu-latest migration notices are warnings/info, not proof of root cause.
-
-0.2.3 lockfile-diagnostics update:
-- `scripts/pin-better-auth.mjs` retries transient npm registry / OSV request failures up to 3 times. Security/version policy failures remain blocking; no bypass.
-- `generate-lockfile.yml` pins pnpm 10.8.0 explicitly, labels key steps, uploads diagnostic logs and writes per-step outcomes to the Actions Summary.
-- Bootstrap push targets only the repository default branch with a normal push; no temporary branch and no force push.
-- Tests updated to enforce main/default-branch policy.
-- Local check: `node --test scripts/__tests__/*.test.mjs` PASS 63/63 on Node.js 22.16.0.
-- Not performed: live npm/OSV resolution, pnpm install, lockfile generation, app typecheck/build, DB/RLS, security scanners, or GitHub Actions run. `pnpm-lock.yaml` is STILL absent; Phase 2 remains UNVERIFIED.
-
-Important Android import detail:
-`import-zip` deliberately saves changed `.github/workflows/**` files to `pending-workflows/` instead of overwriting active workflows. After importing this ZIP, copy `pending-workflows/generate-lockfile.yml` into `.github/workflows/generate-lockfile.yml` using GitHub editor and commit it on main/default branch, otherwise the new per-step summary workflow will not become active. The script retry change itself is imported normally.
-
-See `docs/development/LOCKFILE-BOOTSTRAP-FIX-2026-10-28-BN.md` for the exact next steps.
+ব্যবহারকারীর GitHub Actions স্ক্রিনশটে Better Auth gate, lockfile generation এবং frozen install সফল; কিন্তু Prettier check 128/129 ফাইলে ব্যর্থ হয়েছে। TypeScript, ESLint, tests এবং lockfile commit ওই run-এ সম্পন্ন হয়নি। নতুন ZIP-এ bootstrap workflow-কে pnpm format চালিয়ে তারপর pnpm format:check করতে আপডেট করা হয়েছে; সব পরবর্তী blocking checks pass হলেই tracked formatting changes + lockfile/catalog normal commit হবে।
+গুরুত্বপূর্ণ: import-zip workflow .github/workflows/** কপি করে না; পরিবর্তিত generate-lockfile workflow pending-workflows/ এ যায়। সক্রিয় workflow GitHub editor দিয়ে main-এ আপডেট না করা পর্যন্ত নতুন আচরণ কার্যকর হবে না।
+বর্তমান অবস্থা: PHASE 2 IMPLEMENTED — UNVERIFIED. কোনো CI green বা production readiness দাবি করা হচ্ছে না।

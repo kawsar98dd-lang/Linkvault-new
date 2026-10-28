@@ -31,3 +31,12 @@ This release ZIP has been checked for archive integrity and targeted text/workfl
 
 - Added `PROGRESS-AND-HANDOFF-BN.txt` with project status, blockers, remaining roadmap, main-only Android instructions, and a new-chat prompt.
 - Handoff/documentation repack only; no new customer-facing Smart Link features and no claim of full CI/build verification.
+
+## 0.2.4-prep corrective workflow update (2026-10-28)
+
+- Added a documented fix for the observed `generate-lockfile` failure: the workflow now applies the repository Prettier configuration before checking formatting.
+- Kept formatting verification, TypeScript, ESLint, tests, Better Auth advisory gate, and strict peer dependency checks blocking.
+- If all required checks pass, the normal commit includes tracked formatting changes plus the generated lockfile and verified catalog pin.
+- Updated static workflow tests to assert the current default/main-branch-only policy rather than an obsolete `chore/bootstrap` branch expectation.
+- Added Bengali audit/report notes based on the user's real GitHub Actions screenshots.
+- No lockfile was fabricated and no claim of CI green is made.

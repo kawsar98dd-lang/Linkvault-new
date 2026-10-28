@@ -38,13 +38,12 @@ test('workflow is manual-only, writes only to the default branch, never forces, 
   assert.match(wfText, /^permissions:\n {2}contents: write\n\n/m); // the only permission, nothing else
   assert.equal((wfText.match(/permissions:/g) ?? []).length, 1);
   assert.match(wfText, /TARGET_BRANCH: \$\{\{ github\.event\.repository\.default_branch \}\}/);
-  assert.match(wfText, /Require the default\/main branch/);
   assert.match(wfText, /git push origin "HEAD:refs\/heads\/\$TARGET_BRANCH"/);
   for (const line of wfText.split('\n').filter((l) => /git push/.test(l))) {
     assert.doesNotMatch(line, /--force|\s-f\s|\+|:\s*main|\bmaster\b|--delete/);
   }
   assert.doesNotMatch(wfText, /curl|wget|https?:\/\/(?!github)|set -x|secrets\.|--delete|rm -rf \./);
-  assert.match(wfText, /Run this workflow from the repository default branch only/);
+  assert.match(wfText, /Require the default\/main branch/);
   assert.match(wfText, /dry_run:[\s\S]*?default: true/);
   assert.equal(VALIDATE && COPY && TRACKED ? 3 : 0, 3, 'three embedded programs found');
 });

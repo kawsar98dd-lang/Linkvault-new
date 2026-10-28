@@ -10,47 +10,19 @@ import { evaluateOsv } from './lib/advisory.mjs';
 import { chooseStable, setCatalogVersion } from './lib/pin.mjs';
 
 const file = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'pnpm-workspace.yaml');
-
-// Retry only transient transport / HTTP failures. Policy failures (deprecated version,
-// advisory, floor) are never retried or bypassed.
-async function fetchJsonWithRetry(url, options = {}, label, attempts = 3) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, { ...options, signal: AbortSignal.timeout(options.timeoutMs ?? 30_000) });
-      if (response.ok) return await response.json();
-      const transient = response.status === 408 || response.status === 429 || response.status >= 500;
-      if (!transient || attempt === attempts) throw new Error(`${label} responded HTTP ${response.status}${transient ? ' after retries' : ''}`);
-      lastError = new Error(`${label} responded HTTP ${response.status}`);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt === attempts) break;
-    }
-    process.stderr.write(`${label} request failed (attempt ${attempt}/${attempts}); retrying shortly.\n`);
-    await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
-  }
-  throw new Error(`${label} request failed after ${attempts} attempts: ${lastError?.message ?? 'unknown error'}`);
-}
-
 try {
-  const registry = await fetchJsonWithRetry(
-    'https://registry.npmjs.org/better-auth',
-    { headers: { accept: 'application/json' }, timeoutMs: 30_000 },
-    'npm registry',
-  );
-  const version = chooseStable(registry);
+  const reg = await fetch('https://registry.npmjs.org/better-auth', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(30_000) });
+  if (!reg.ok) throw new Error(`npm registry responded ${reg.status}`);
+  const version = chooseStable(await reg.json());
 
-  const osvDoc = await fetchJsonWithRetry(
-    'https://api.osv.dev/v1/query',
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ package: { name: 'better-auth', ecosystem: 'npm' }, version }),
-      timeoutMs: 20_000,
-    },
-    'OSV advisory service',
-  );
-  const { blocking } = evaluateOsv(osvDoc);
+  const osv = await fetch('https://api.osv.dev/v1/query', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ package: { name: 'better-auth', ecosystem: 'npm' }, version }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!osv.ok) throw new Error(`OSV responded ${osv.status}`);
+  const { blocking } = evaluateOsv(await osv.json());
   if (blocking.length > 0) throw new Error(`better-auth@${version} has blocking advisories: ${blocking.map((b) => b.id).join(', ')}`);
 
   writeFileSync(file, setCatalogVersion(readFileSync(file, 'utf8'), 'better-auth', version));

@@ -39,12 +39,7 @@ catalog:
   # Satisfies the REQUIRED peer `webpack@>=4.40.0` of @sentry/webpack-plugin (a dependency of @sentry/nextjs).
   # Our .npmrc keeps auto-install-peers=false + strict-peer-dependencies=true, so every peer must be declared.
   # Declared only by apps/web (the sole consumer). Exact pin; existence NOT verified offline (CI/bootstrap will).
-  webpack: 5.112.0
-  "@opentelemetry/api": 1.9.0
-
-
-# Keep Sentry 9.12 peer compatibility deterministic while generating the lockfile.
-overrides:
+  webpack: 5.98.0
   "@opentelemetry/api": 1.9.0
 
 onlyBuiltDependencies:

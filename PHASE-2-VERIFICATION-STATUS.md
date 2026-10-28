@@ -144,3 +144,11 @@ simulation, never on GitHub.
 ## Release 0.2.2 main-only workflow note (2026-10-28)
 
 The ZIP importer and dependency bootstrap workflow have been adapted to the repository default branch, per project-owner instruction. This is a workflow/documentation change only; it does not verify Phase 2 or add customer-facing Smart Link features. Run the workflows on GitHub and review their logs before treating any step as complete.
+
+## Addendum — 2026-10-28: observed GitHub bootstrap formatting failure
+
+The user supplied real GitHub Actions screenshots. In the observed `generate-lockfile` run, Better Auth registry + OSV checks, lockfile generation, and frozen install completed successfully; Prettier check then failed with 128/129 files reported. TypeScript, ESLint, tests, and the commit step did not run/complete in that run. Therefore, no committed lockfile or successful full bootstrap is established by those screenshots.
+
+A corrective package updates the bootstrap workflow to run `pnpm format` followed by `pnpm format:check`, while preserving blocking typecheck/lint/tests and the security gates. It stages tracked formatting changes only after all required checks pass, along with the generated lockfile and verified dependency pin. The workflow file itself is excluded from Prettier. Because `import-zip` does not copy `.github/workflows/**` directly, the changed workflow is placed in `pending-workflows/` by the importer and must be manually applied to `.github/workflows/generate-lockfile.yml` on the default/main branch.
+
+This is a workflow correction, not proof of green CI. PHASE 2 remains **IMPLEMENTED — UNVERIFIED** until actual runtime, database/RLS, build, and security checks pass.

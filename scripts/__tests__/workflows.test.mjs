@@ -93,6 +93,7 @@ test('bootstrap workflow resolves + gates the Better Auth pin and never fabricat
   const t = read('generate-lockfile.yml');
   const order = ['pin-better-auth.mjs', 'check-better-auth-advisory.mjs', 'pnpm install --lockfile-only', 'pnpm install --frozen-lockfile', 'pnpm format'].map((s) => t.indexOf(s));
   assert.ok(order.every((i) => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), 'step order');
+  assert.match(t, /Apply the repository Prettier configuration once[\s\S]*?run: pnpm format[\s\S]*?run: pnpm format:check/);
   assert.doesNotMatch(t, /cat\s*>\s*pnpm-lock/);
 });
 
@@ -116,12 +117,12 @@ test('the floating-version guard matches VALUES, not the "next" dependency key (
   assert.match('npx foo@latest', re);
 });
 
-test('bootstrap workflow commits only to the repository default branch (no temporary branch or force push)', () => {
+test('bootstrap workflow updates only the repository default branch with a normal push', () => {
   const t = read('generate-lockfile.yml');
   assert.match(t, /DEFAULT_BRANCH: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(t, /git checkout -B "\$DEFAULT_BRANCH" "origin\/\$DEFAULT_BRANCH"/);
   assert.match(t, /git push origin "HEAD:refs\/heads\/\$DEFAULT_BRANCH"/);
-  assert.doesNotMatch(t, /chore\/bootstrap|--force/);
+  assert.doesNotMatch(t, /git checkout -b chore\/bootstrap|git push[^\n]*--force/);
 });
 
 test('Prettier ignores workflow files so the bootstrap push cannot be rejected for modifying .github/workflows', () => {
@@ -133,7 +134,7 @@ test('import-zip workflow (and its docs copy) is safe by construction', () => {
   // v6: the helper became a real workflow; scripts/__tests__/import-zip.test.mjs tests its behaviour in depth.
   for (const f of ['.github/workflows/import-zip.yml', 'docs/development/import-zip.workflow.yml']) {
     const t = readFileSync(join(REPO, f), 'utf8');
-    assert.match(t, /Run this workflow from the repository default branch only/);
+    assert.match(t, /must be run from the default branch|Require the default\/main branch/);
     assert.match(t, /Forbidden entry/);
     assert.match(t, /must contain exactly one top-level project directory/);
     assert.match(t, /Not a full project ZIP, missing/);

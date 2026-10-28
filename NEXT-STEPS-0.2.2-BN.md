@@ -15,7 +15,7 @@
 1. ZIP-টি repository root-এ main branch-এ upload করে commit করুন।
 2. Actions → import-zip চালান, প্রথমে `dry_run=true`।
 3. Dry run সফল হলে `dry_run=false` দিয়ে apply করুন।
-4. এরপর Actions → generate-lockfile চালান।
+4. এরপর Actions → generate-lockfile চালান। যদি Prettier formatting-এ ব্যর্থ হয়, নতুন ZIP-এর `pending-workflows/generate-lockfile.yml`-এর আপডেট করা workflow-টি GitHub editor দিয়ে সক্রিয় `.github/workflows/generate-lockfile.yml`-এ বসিয়ে `main`-এ commit করুন; এরপর workflow আবার চালান। আপডেট করা workflow প্রথমে `pnpm format`, তারপর `pnpm format:check` চালায়।
 5. কোনো workflow ব্যর্থ হলে আরেকবার apply বা জোর করে push করবেন না; log/স্ক্রিনশট দিন।
 
 ## গুরুত্বপূর্ণ
