@@ -8,43 +8,43 @@ packages:
 # patch, then re-run `pnpm audit` (CI blocks on advisories). See
 # docs/development/dependency-pinning.md.
 catalog:
-  typescript: 5.8.3
-  zod: 3.24.2
-  hono: 4.7.5
-  "@hono/zod-openapi": 0.19.2
-  drizzle-orm: 0.41.0
-  pg: 8.14.1
-  "@types/pg": 8.11.11
+  typescript: 7.0.2
+  zod: 4.6.7
+  hono: 4.13.14
+  "@hono/zod-openapi": 1.6.3
+  drizzle-orm: 0.45.4
+  pg: 8.23.1
+  "@types/pg": 8.23.1
   # UNRESOLVED ON PURPOSE: 1.2.7 is below the security floor (1.4.9). The exact current stable version must be
   # resolved from the registry by the networked `generate-lockfile` workflow (scripts/pin-better-auth.mjs),
   # which verifies it exists, is above the floor and has no critical/high advisory. Until then installs fail closed.
-  better-auth: 0.0.0-UNRESOLVED
-  "@node-rs/argon2": 2.0.2
-  next: 15.3.0
-  react: 19.1.0
-  react-dom: 19.1.0
-  "@types/react": 19.1.0
-  "@types/react-dom": 19.1.1
-  "@types/node": 22.14.0
+  better-auth: 1.7.13
+  "@node-rs/argon2": 2.2.2
+  next: 16.4.3
+  react: 19.3.1
+  react-dom: 19.3.1
+  "@types/react": 19.3.0
+  "@types/react-dom": 19.3.0
+  "@types/node": 26.6.5
   server-only: 0.0.1
-  vitest: 3.1.1
-  "@vitest/coverage-v8": 3.1.1
-  eslint: 9.24.0
-  "@eslint/js": 9.24.0
-  typescript-eslint: 8.29.0
-  prettier: 3.5.3
-  turbo: 2.5.0
-  "@sentry/nextjs": 9.12.0
-  "@sentry/node": 9.12.0
+  vitest: 5.0.5
+  "@vitest/coverage-v8": 5.0.5
+  eslint: 10.13.0
+  "@eslint/js": 10.0.1
+  typescript-eslint: 8.72.0
+  prettier: 3.9.10
+  turbo: 2.11.10
+  "@sentry/nextjs": 11.9.0
+  "@sentry/node": 11.9.0
   # Satisfies the REQUIRED peer `webpack@>=4.40.0` of @sentry/webpack-plugin (a dependency of @sentry/nextjs).
   # Our .npmrc keeps auto-install-peers=false + strict-peer-dependencies=true, so every peer must be declared.
   # Declared only by apps/web (the sole consumer). Exact pin; existence NOT verified offline (CI/bootstrap will).
-  webpack: 5.112.0
-  "@opentelemetry/api": 1.9.0
+  webpack: 5.112.2
+  "@opentelemetry/api": 1.10.0
 
 # Keep Sentry 9.12 peer compatibility deterministic while generating the lockfile.
 overrides:
-  "@opentelemetry/api": 1.9.0
+  "@opentelemetry/api": 1.10.0
 
 onlyBuiltDependencies:
   - "@node-rs/argon2"
